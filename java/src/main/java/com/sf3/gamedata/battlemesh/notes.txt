@@ -1,0 +1,187 @@
+
+Possible tree node values:
+00 - 0000 0000 - empty?
+
+
+fe - 1111 1110 - leaf/back?
+fd - 1111 1101 - node?
+
+Notes:
+* 0xfe and 0xfd means "take mesh" and "don't take  mesh".
+* maybe bit 0 = 1 means "take mesh", so tag 09 and 11 can additionally take a mesh
+* maybe bit 1 = 1 means "take animation transform", so only 0xfe can take an animation transform
+another idea:
+* 0xfd is push matrix (and take the next one) from animation data
+* 0xfe is pop matrix
+* 00 is draw mesh
+
+root:
+0 0xfd
+1   0xfd
+    0x00 0 - hip
+2     0xfd
+      0x00 1 - upper_leg.R
+3       0xfd
+        0x00 2 - lower_leg.R
+4         0xfd
+          0x00 3 - foot.R
+        0xfe
+      0xfe
+    0xfe
+5     0xfd
+      0x00 4 - upper_leg.L
+6       0xfd
+        0x00 5 - lower_leg.L
+7         0xfd
+          0x00 6 - foot.L
+        0xfe
+      0xfe
+    0xfe
+  0xfe (torso is one level less than hip)
+8   0xfd
+9     0xfd
+      0x00 8 - torso
+    0xfe
+    0x00 7 - cape? (cape on back)
+10    0xfd
+11      0xfd
+        0x00 9 - upper_arm.R
+12        0xfd
+          0x00 10 - lower_arm.R
+13          0xfd
+            0x00 11 - hand.R
+14            0xfd
+              0x00 12 - finger.R
+            0xfen (back to level hand.R)
+15            0xfd
+                0x1100 tag_weapon_tip
+                  -4.2241,
+                  -9.9907,
+                  -20.3054,
+                0x10000000
+                  -4.1674,
+                  -10.0212, tag_weapon_start
+                  -2.4978,
+                0x30000000
+                  -4.1988,
+                  -9.9337, tag_weapon
+                  0.3238,
+                  0.0000,
+                  0.0000, rotation?
+                  0.0000,
+                  1.0000, (this is angle?)
+                  1.0000,
+                  1.0000, scale?
+                  1.0000,
+              0xfe
+            0xfe
+          0xfe
+        0xfe
+      0xfe (back to kinda torso level)
+16      0xfd
+        0x00 upper_arm.L
+17        0xfd
+          0x00 lower_arm.L
+18          0xfd
+            0x00 hand.L
+19            0xfd
+              0x00 finger.L
+            0xfe
+          0xfe (back to lower arm)
+20          0xfd
+            0x00 17 - shield
+          0xfe
+        0xfe
+      0xfe
+21      0xfd
+        0x00 18 - head
+      0xfe (back to kinda torso level)
+      0x09
+        -0.0099,
+        -19.1857, tag_chest
+        -1.6724,
+    0xfe
+  0xfe
+0xfe (back to root level. so this is the end marker)
+0x00 (padding to int32 size)
+
+'animation_data'
+'bound_box'
+'children'
+'color'
+'data'
+'delta_location'
+'delta_rotation_euler'
+'delta_rotation_quaternion'
+'delta_scale'
+'instance_type'
+
+'location'
+
+'make_local'
+
+'matrix_basis'
+'matrix_local'
+'matrix_parent_inverse'
+'matrix_world'
+
+'name'
+'name_full'
+
+'parent'
+
+'parent_bone'
+'pose'
+'pose_library'
+
+'rotation_axis_angle'
+'rotation_euler'
+'rotation_mode'
+'rotation_quaternion'
+'scale'
+
+'show_transparent'
+'show_wire'
+
+
+'type'
+
+'use_fake_user'
+
+'users'
+
+0: "",
+1: "",
+2: "",
+3: "",
+4: "",
+5: "",
+6: "",
+7: "",
+8: "[ 0.5383 , -2.3420 , 9.0600 ]",
+
+
+0 0xfd [ 0.0000 , 2.5119 , 0.0353 ]
+1   0xfd [ 2.8635 , -0.8962 , 4.3593 ]
+    0x00 0 - hip
+2     0xfd [ -6.5843 , -4.0038 , -8.8748 ]
+      0x00 1 - upper_leg.R
+3       0xfd [ 0.0000 , -3.1777 , 6.6803 ]
+        0x00 2 - lower_leg.R
+4         0xfd [ 0.4771 , -1.0770 , 0.0391 ]
+          0x00 3 - foot.R
+        0xfe
+      0xfe
+    0xfe
+5     0xfd [ 7.9882 , -7.6999 , -11.0661 ]
+      0x00 4 - upper_leg.L
+6       0xfd [ 0.0000 , -3.4998 , 6.9029 ]
+        0x00 5 - lower_leg.L
+7         0xfd [ -0.2805 , -0.6934 , 0.2202 ]
+          0x00 6 - foot.L
+        0xfe
+
+
+see slAng2Dec or slAng2Hex
+
+https://blender.stackexchange.com/questions/14889/how-to-get-an-armature-by-name-in-python-and-get-access-to-its-bones
