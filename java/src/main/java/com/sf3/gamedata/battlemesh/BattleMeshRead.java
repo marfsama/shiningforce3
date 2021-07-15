@@ -82,7 +82,8 @@ public class BattleMeshRead {
             }
         }
 
-        files.forEach(BattleMeshRead::analyzeFile);
+        //files.forEach(BattleMeshRead::analyzeFile);
+        BattleMeshRead.analyzeFile("x8pc700");
     }
 
     private static void analyzeFile(String fileName) {
@@ -125,11 +126,11 @@ public class BattleMeshRead {
         List<String> animationsTable = getAnimationsTable(file.getBlock("animations").getBlock("animations"));
         statistics.addProperty("animationsTable", animationsTable);
 
-        statistics.addProperty("numKeyFrameStuff", file.getBlock("animations").getBlock("dictionary").getProperties().size());
-        List<String> dictionaryTable = getDictionaryTable(file.getBlock("animations").getBlock("dictionary"));
-        statistics.addProperty("dictionaryTable", dictionaryTable);
+        statistics.addProperty("numKeyFrameStuff", file.getBlock("animations").getBlock("bone_key_frames").getProperties().size());
+        List<String> boneKeyFramesSummary = getBoneKeyFramesSummary(file.getBlock("animations").getBlock("bone_key_frames"));
+        statistics.addProperty("boneKeyFramesSummary", boneKeyFramesSummary);
 
-        statistics.addProperty("keyframes_transposed", getTransposeKeyframes(file.getBlock("animations").getBlock("dictionary")));
+        statistics.addProperty("keyframes_transposed", getTransposeKeyframes(file.getBlock("animations").getBlock("bone_key_frames")));
 
         // keyframe clusters in bonekeyframe animation block
         // ie 1..30, 100..140, 200..233
@@ -166,7 +167,7 @@ public class BattleMeshRead {
         return result;
     }
 
-    private static List<String> getDictionaryTable(Block keyFrames) {
+    private static List<String> getBoneKeyFramesSummary(Block keyFrames) {
         String line = "\"| %2d | %3d / %3d / %3d | %3d | %3d |\"";
         List<String> table = new ArrayList<>();
         table.add("\"| No  | num Keyframes  | min | max |\"");
@@ -205,10 +206,10 @@ public class BattleMeshRead {
                 .map(animation -> {
                             return String.format(line,
                                     i.getAndIncrement(),
-                                    animation.getObject("animationID"),
+                                    animation.getObject("start_frame"),
                                     animation.getObject("numberOfFrames"),
                                     animation.getInt("numberOfFrames"),
-                                    animation.getObject("unknown2"),
+                                    animation.getObject("type"),
                                     animation.getObject("distanceFromEnemy"),
                                     animation.getBlock("events").getProperties().size(),
                                     animation.getBlock("events").getProperties().values().stream()
@@ -345,10 +346,8 @@ public class BattleMeshRead {
         header.addProperty("bounding_box_min", new Point(stream));
         header.addProperty("bounding_box_max", new Point(stream));
 
-        int dictionaryOffset = stream.readInt();
-        header.addProperty("dictionary_offset", new HexValue(dictionaryOffset));
-        header.addProperty("dictionary_offset_absolute", new HexValue(dictionaryOffset + chunk.getStart()));
-        header.addProperty("header_end", new HexValue((int) stream.getStreamPosition()));
+        int boneKeyFramesOffset = stream.readInt();
+        header.addProperty("bone_key_frames_offset", new HexValue(boneKeyFramesOffset));
 
         Block animations = chunk.createBlock("animations", chunk.getStart(), 0);
         int j = 0;
@@ -359,9 +358,9 @@ public class BattleMeshRead {
                 break;
             }
             Block entry = animations.createBlock("animation["+j+"]", (int) stream.getStreamPosition(), 3*4);
-            entry.addProperty("animationID", new HexValue(animationId));
-            entry.addProperty("numberOfFrames", new HexValue(stream.readUnsignedShort()));
-            entry.addProperty("unknown2", new HexValue(stream.readUnsignedShort()));
+            entry.addProperty("start_frame", animationId);
+            entry.addProperty("numberOfFrames", stream.readUnsignedShort());
+            entry.addProperty("type", new HexValue(stream.readUnsignedShort()));
             entry.addProperty("distanceFromEnemy", new HexValue(stream.readUnsignedShort()));
             int offset = stream.readInt();
             entry.addProperty("_offset", new HexValue(offset));
@@ -387,18 +386,18 @@ public class BattleMeshRead {
                 j++;
             }
         }
-        header.addProperty("animation_events_end", new HexValue((int) stream.getStreamPosition()));
+        header.addProperty("_animation_events_end", new HexValue((int) stream.getStreamPosition()));
 
 
-        stream.seek((long) chunk.getBlock("header").getInt("dictionary_offset") + chunk.getStart());
-        Block dictionary = chunk.createBlock("dictionary", chunk.getStart(), 0);
+        stream.seek((long) chunk.getBlock("header").getInt("bone_key_frames_offset") + chunk.getStart());
+        Block boneKeyFrames = chunk.createBlock("bone_key_frames", chunk.getStart(), 0);
         int i = 0;
         while (true) {
             int translationKeyFrames = stream.readInt();
             if (translationKeyFrames == 0xffffffff)  {
                 break;
             }
-            Block entry = dictionary.createBlock("dictionary["+i+"]", (int) stream.getStreamPosition(), 16*4);
+            Block entry = boneKeyFrames.createBlock("bone["+i+"]", (int) stream.getStreamPosition(), 16*4);
             int rotationKeyFrames = stream.readInt();
             int scaleKeyFrames = stream.readInt();
 
@@ -409,7 +408,7 @@ public class BattleMeshRead {
             for (int o = 0; o < 13; o++) {
                 offsets.add(new HexValue(stream.readInt()+chunk.getStart()));
             }
-            entry.addProperty("offsets", offsets);
+            entry.addProperty("_offsets", offsets);
             long tempOffset = stream.getStreamPosition();
             List<Integer> translationTimes = readList(stream, translationKeyFrames, offsets.get(0).getValue(), BattleMeshRead::readShort);
             List<Integer> rotationTimes = readList(stream, rotationKeyFrames, offsets.get(1).getValue(), BattleMeshRead::readShort);
@@ -435,7 +434,7 @@ public class BattleMeshRead {
             stream.seek(tempOffset);
             i++;
         }
-        header.addProperty("dictionary_end", new HexValue((int) stream.getStreamPosition()));
+        header.addProperty("_bone_key_frames_end", new HexValue((int) stream.getStreamPosition()));
         return chunk;
     }
 
@@ -474,7 +473,13 @@ public class BattleMeshRead {
 
     public static Fixed readHalfSglFixed(ImageInputStream stream) {
         try {
-            return new Fixed(stream.readShort());
+            // read 16 bits signed
+            short s = stream.readShort();
+            // sign extend to 32 bits
+            int i = (int) s;
+            // scale to correct value
+            int scaled = i << 2;
+            return new Fixed(scaled);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }

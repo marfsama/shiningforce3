@@ -6,6 +6,7 @@ bl_info = {
 
 import os
 import json
+import math
 
 import bpy
 import bmesh
@@ -33,6 +34,12 @@ FLIP_MODES = {
     3: [2, 3, 0, 1]   # flip both
 }
 
+ANIMATION_TYPES = {
+    0x0:  "idle",
+    0x10: "hit",
+    0x20: "block",
+    0x70: "attack"
+}
 
 class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
     """Import Shining Force Battle Model"""      # Use this as a tooltip for menu items and buttons.
@@ -134,7 +141,7 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         return mat
 
     def create_animation_actions(self, context, file_data, meshes):
-        animations = file_data.get("animations").get("dictionary")
+        animations = file_data.get("animations").get("bone_key_frames")
 
         print("animations:{}".format(len(animations)))
 
@@ -164,18 +171,193 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
 #            animation_data.action = action
 
     def create_skeleton(self, context, file_data, meshes):
-        animations = list(file_data.get("animations").get("dictionary").values())
+        animations = list(file_data.get("animations").get("bone_key_frames").values())
         skeleton = file_data.get("meshes").get("skeleton")
-        mesh_root = self.create_empty(context, "mesh_root")
-        mesh_root.rotation_euler[0] = -1.5
+
+        # can only create armature in object mode
+        if (bpy.context.mode != 'OBJECT'):
+            bpy.ops.object.mode_set(mode='OBJECT')
+        # create armature and find root node
+        bpy.ops.object.armature_add()
+        armature_object = bpy.context.active_object
+        armature = armature_object.data
+
+        # enter edit mode to modify bones
+        bpy.ops.object.mode_set(mode='EDIT',toggle=True)
+        root = [k for k in armature.edit_bones if k.parent == None][0]
+        root.tail[2] = 0.1
+        armature.edit_bones[root.name].select = True
 
         tags = {}
 
         for child in skeleton["childs"]:
-            self.process_skeleton_bone(context, child, mesh_root, animations, meshes, tags)
+            self.process_skeleton_bone_with_armature(context, armature_object, child, root, animations, meshes, tags)
+
+        # switch to object mode to save the edit_bones
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # rig meshes to bones
+        for mesh in meshes:
+            if "bone_name" in mesh:
+                bone_name = mesh["bone_name"]
+                mesh.parent = armature_object
+                mesh.parent_type = "BONE"
+                mesh.parent_bone = bone_name
+
+        # put weapon in weapon tag
+        # there must be a tag 0x30 and the last mesh shouldn't already have a parent
+        last_mesh = meshes[-1]
+        if last_mesh.parent is None and 0x30 in tags:
+            mesh.parent = armature_object
+            mesh.parent_type = "BONE"
+            last_mesh.parent_bone = tags[0x30].name
+            print(tags[0x30].parent_recursive)
+            parents = ".".join([parent.name for parent in tags[0x30].parent_recursive].reverse())
+            print("added weapon to {}.{}".format(parents, tags[0x30].name))
+
+        # in pose mode animations can be created
+        bpy.ops.object.mode_set(mode='POSE')
+
+        pose_bones = armature_object.pose.bones
+
+        root_pose_bone = [k for k in pose_bones if k.parent is None][0]
+        root_pose_bone.rotation_mode = 'XYZ'
+        root_pose_bone.rotation_euler[0] = math.pi
+
+        self.add_tag_transforms(armature_object, bone_name, pose_bones)
+
+        for animation_description in file_data.get("animations").get("animations").values():
+            type = int(animation_description.get("type"), 16)
+            if type in ANIMATION_TYPES:
+                type_name = ANIMATION_TYPES.get(type)
+                start_frame = animation_description.get("start_frame")
+                num_frames = animation_description.get("numberOfFrames")
+                end_frame = start_frame + num_frames - 1
+                self.create_animation_action(animations, armature_object, pose_bones, type_name, start_frame, end_frame)
+
+        self.create_animation_action(animations, armature_object, pose_bones, "all", 1, 1000)
+
+        # switch back to object mode to save the pose
+        bpy.ops.object.mode_set(mode='OBJECT')
         return tags
 
-    def process_skeleton_bone(self, context, bone_desc, bone, animations, meshes, tags):
+    def filter_frames(self, animations, min_frame, max_frame):
+        return {anim[0]: anim[1] for anim in animations.items() if min_frame <= int(anim[0]) <= max_frame}
+
+    def create_animation_action(self, animations, armature_object, pose_bones, action_name, min_frame, max_frame):
+        actions = bpy.data.actions
+        if action_name in actions:
+            actions.remove(actions[action_name])
+
+        action = actions.new(action_name)
+        action.use_fake_user = True
+        # loop over "normal" bones
+        for bone in armature_object.data.bones:
+            if "bone_index" in bone:
+                # get the pose bone
+                bone_name = bone.name
+                pose_bone = pose_bones[bone_name]
+                bone_index = bone["bone_index"]
+                # find bone in animation bones
+                animation = animations[bone_index]
+                translations = self.filter_frames(animation.get("translation"), min_frame, max_frame)
+                for channel in range(0, 3):
+                    fcurve = action.fcurves.new(data_path='pose.bones["{}"].location'.format(bone_name), index=channel)
+                    for frame, translation in translations.items():
+                        location = json.loads(translation)
+                        fcurve.keyframe_points.insert(int(frame) - min_frame + 1, location[channel])
+
+                rotations = self.filter_frames(animation.get("rotation"), min_frame, max_frame)
+                for channel in range(0, 4):
+                    fcurve = action.fcurves.new(data_path='pose.bones["{}"].rotation_quaternion'.format(bone_name),
+                                                index=channel)
+                    for frame, rotation in rotations.items():
+                        rotation_values = json.loads(rotation)
+                        fcurve.keyframe_points.insert(int(frame) - min_frame + 1, rotation_values[(channel + 3) % 4])
+
+                scales = self.filter_frames(animation.get("scale"), min_frame, max_frame)
+                for channel in range(0, 3):
+                    fcurve = action.fcurves.new(data_path='pose.bones["{}"].scale'.format(bone_name), index=channel)
+                    for frame, scale in scales.items():
+                        scale_values = json.loads(scale)
+                        fcurve.keyframe_points.insert(int(frame) - min_frame + 1, scale_values[channel])
+
+    def add_tag_transforms(self, armature_object, bone_name, pose_bones):
+        # loop over "normal" bones
+        for bone in armature_object.data.bones:
+            # get the pose bone
+            bone_name = bone.name
+            pose_bone = pose_bones[bone_name]
+
+            if "location" in bone:
+                pose_bone.location = bone["location"]
+
+            if "scale" in bone:
+                pose_bone.scale = bone["scale"]
+
+            if "rotation_quaternion" in bone:
+                pose_bone.rotation_quaternion = bone["rotation_quaternion"]
+        return bone_name, pose_bone
+
+    def create_bone(self, context, armature, parent, name):
+        edit_bone = armature.data.edit_bones.new(name)
+        edit_bone.parent = parent
+        edit_bone.head = parent.tail
+        edit_bone.tail = (0,0,edit_bone.head[2]+0.01)
+        edit_bone.use_connect = False
+        return edit_bone
+
+    def process_skeleton_bone_with_armature(self, context, armature, bone_desc, bone, animations, meshes, tags):
+        if "index" in bone_desc:
+            # create new bone
+            bone_index = bone_desc["index"]
+            current_bone = self.create_bone(context, armature, bone, "bone[{}]".format(bone_index))
+            current_bone["bone_index"] = bone_index
+        else:
+            current_bone = bone
+
+        # add meshes
+        if "meshes" in bone_desc:
+            for mesh_id in bone_desc["meshes"]:
+                mesh = meshes[mesh_id]
+                # remember name so we can rig the seleton afterwards in pose mode
+                mesh["bone_name"] = current_bone.name
+
+        # add tags to skeleton
+        if "tags" in bone_desc:
+            for child in bone_desc["tags"]:
+                type = child.get("type")
+                tag = self.create_bone(context, armature, current_bone, "tag {}".format(type))
+                tags[type] = tag
+                tag["location"] = json.loads(child.get("translation"))
+                if "rotation" in child:
+                    rotation_values = json.loads(child.get("rotation"))
+                    tag["rotation_quaternion"] = [rotation_values[3], rotation_values[0], rotation_values[1],
+                                                  rotation_values[2]]
+                if "scale" in child:
+                    tag["scale"] = json.loads(child.get("scale"))
+
+
+        if "childs" in bone_desc:
+            for child in bone_desc["childs"]:
+                self.process_skeleton_bone_with_armature(context, armature, child, current_bone, animations, meshes, tags)
+
+    def create_skeleton_with_empty(self, context, file_data, meshes):
+        animations = list(file_data.get("animations").get("bone_key_frames").values())
+        skeleton = file_data.get("meshes").get("skeleton")
+        mesh_root = self.create_empty(context, "mesh_root")
+        # rotate the model so up is in positive z (blender) instead of negative y (saturn)
+        mesh_root.rotation_euler[0] = -math.pi / 2
+        # scale to 10%
+        mesh_root.scale = [0.1, 0.1, 0.1]
+
+        tags = {}
+
+        for child in skeleton["childs"]:
+            self.process_skeleton_bone_with_empty(context, child, mesh_root, animations, meshes, tags)
+        return tags
+
+    def process_skeleton_bone_with_empty(self, context, bone_desc, bone, animations, meshes, tags):
         if "index" in bone_desc:
             # create new bone
             bone_index = bone_desc["index"]
@@ -243,9 +425,9 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         tags = self.create_skeleton(context, file_data, meshes)
         # put weapon in weapon tag
         # there must be a tag 0x30 and the last mesh shouldn't already have a parent
-        last_mesh = meshes[-1]
-        if last_mesh.parent is None and 0x30 in tags:
-            last_mesh.parent = tags[0x30]
+        #last_mesh = meshes[-1]
+        #if last_mesh.parent is None and 0x30 in tags:
+        #    last_mesh.parent = tags[0x30]
 
         return {'FINISHED'}
 
