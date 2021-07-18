@@ -4,26 +4,26 @@ Battle meshes always have the extension ".bin", and the files start with "x8pc".
 
 # File Structure
 
-    +-------------------------+
-    | Header (0x800 bytes)    |
-    +-------------------------+
-    | Texture Definitions     |
-    |                         |
-    +-------------------------+
-    | Compressed Texture Data |
-    |                         |
-    +-------------------------+
-    | Meshes                  |
-    |    Header               |
-    |    Body Meshes          |
-    |    Weapon Mesh          |
-    |    Skeleton             |
-    +-------------------------+
-    | Animation               |
-    |    Header               |
-    |    Unknown Anim Stuff   |
-    |    Keyframes            |
-    +-------------------------+
+    +--------------------------+
+    | Header (0x800 bytes)     |
+    +--------------------------+
+    | Texture Definitions      |
+    |                          |
+    +--------------------------+
+    | Compressed Texture Data  |
+    |                          |
+    +--------------------------+
+    | Meshes                   |
+    |    Header                |
+    |    Body Meshes           |
+    |    Weapon Mesh           |
+    |    Skeleton              |
+    +--------------------------+
+    | Animation                |
+    |    Header                |
+    |    Animation Description |
+    |    Keyframes             |
+    +--------------------------+
 
 # Header (0x40 bytes)
 
@@ -74,13 +74,13 @@ The order of the bits in the control word is msb to lsb.
     * o (11 bits) is negative offset in word boundary. so you have to multiply with 2 to get a (negative) byte offset 
     * l (5 bits) is length in words. to get the copy length in bytes mutliply with 2
 
-Note that this decryption is independent of texture size/type. You can view this as a stream decompress. 
+Note that this (de)compression is independent of texture size/type. You can view this as a stream decompress. 
 
 # Mesh Header (0x14 bytes)
 
 | Offset | Name                | Type       | Count        | Description
 |--------|---------------------|------------|--------------|----------------------------
-| 0x00   | header_size         | uint32     |   1          | unknown, always 0x08
+| 0x00   | header_size         | uint32     |   1          | header size, always 0x08
 | 0x04   | offset_skeleton     | uint32     |   1          | offset to skeleton
 | 0x08   | offset_body_mesh    | uint32     |   1          | offset to body meshes (list of XPDATA)
 | 0x0C   | offset_weapon_mesh  | uint32     |   1          | offset to weapon mesh (XPDATA)
@@ -126,15 +126,14 @@ Algorithm:
   * byte == 0x00 draw mesh
     * add/draw mesh `mesh_index` to bone at top of stack
     * increase `mesh_index`
-  * byte is in (0x09, 0x10, 0x11, 0x20)? draw external mesh
+  * byte is in (tag with location)? draw external mesh
     * (this is some kind of tag for additional meshes)
     * skip to 32bit boundary. the skipped bytes are always 0x00
     * read POINT (3 x FIXED). This is the translation part for the tag
-  * byte is 30? draw external mesh with rotation and scale
+  * byte is (tag with location, rotation and scale)? draw external mesh with rotation and scale
     * skip to 32bit boundary. the skipped bytes are always 0x00
     * read translation: POINT (3 x FIXED)
-    * read rotation: 3 x FIXED (x,y,z) and 1 x ANGLE + padding or 3 x FIXED 
-      (x,y,z) and 1 x FIXED (angle in some other format)
+    * read rotation quarternion: 4 x FIXED (x,y,z, w) 
     * read scale: 3 x FIXED
   
 ## Notes
@@ -142,25 +141,33 @@ Algorithm:
 The saturn probably  used this structure to directly draw the model. Maybe this is easiest reproduced
 with OpenGL commands.
 
-Tag positions are absolute. See discussion about skeletal animation below in the discussion chapter.
+Tag positions are absolute as are the mesh vertices. The preceding bone may animate the tag.
 
-With the rotation in tag 0x30 (which is the weapon tag) I'm unsure. Most likely this is used in the
-slRotAX(x, y, z, angle) function call, but the angle in this case is 32bit and in an unusual format.
+Rotation is a quaternion. In contrast to the animations the rotation is a full 32bit FIXED here.
 
 Known Tags:
-* 09  tag_chest
-* 10  tag_weapon_base
-* 11  tag_weapon_tip
-* 20  tag_hand? nearly the same as 30 (tag_weapon), but without rotation/scale
-* 30  tag_weapon (translation, rotation, scale)
 
+| Tag | Transformations  | Description
+|------|-----------------|-------------
+| 0x01 | loc             | unknown
+| 0x09 | loc             | tag_chest
+| 0x10 | loc             | tag_weapon_base
+| 0x11 | loc             | tag_weapon_tip
+| 0x12 | loc             | unknown
+| 0x20 | loc             | tag_hand? nearly the same as 30 (tag_weapon), but without rotation/scale
+| 0x21 | loc             | unknown
+| 0x22 | loc             | unknown
+| 0x30 | loc, rot, scale | tag_weapon (translation, rotation, scale)
+
+
+Unknown Command:
+* 0x80 - no transformations (so no padding). Might be a "draw mesh" command or some kind of tag.
 
 # Animation Chunk
 
 The animations are split into two files: each model has a corresponding x8an*.bin file [7].
-The first block in the animation chunk is unknown. The description is taken from [5].
-The second block is a keyframe table.
-
+The first block in the animation chunk is the animation description, so which keyframe range to play for which 
+animation. The second block is an embedded keyframe animation table.
 
 ## Header 
 
@@ -181,101 +188,147 @@ Example x8pc00a.bin (Synbios):
 "bounding_box_min": "[ 0.3832 , -10.9194 , 0.1782 ]",
 "bounding_box_max": "[ 4.6951 , 10.9194 , 3.5723 ]",
 
-Maybe this has something to do with the skeleton scale. See discussion about the skeleton below.
-
 
 ## Animation
 
-Please note that the fields in the animation block is taken from [5].
-
 | Offset | Name                     | Type        | Count        | Description
-+--------+--------------------------+-------------+--------------+-----------------------------
-| 0x00   | animationId              | uint16      |   1          | unknown.
-| 0x02   | numberOfFrames           | uint16      |   1          | unknown.
-| 0x04   | unknown2                 | uint16      |   1          | unknown.
-| 0x06   | distanceFromEnemy        | uint16      |   1          | unknown
+|--------|--------------------------|-------------|--------------|-----------------------------
+| 0x00   | start_frame              | uint16      |   1          | start of frame for animation
+| 0x02   | number_of_frames         | uint16      |   1          | number of frames for the animation
+| 0x04   | type                     | uint16      |   1          | type of animation
+| 0x06   | distance_from_enemy      | uint16      |   1          | distance to place the character from the enemy
 | 0x08   | offset_events            | uint32      |   1          | relative offset to AnimationEvent list 
 
-The animation seems to list is the complete animation: various attacks, magic, heal, hit,...
-Each animation has a list of events, these seems to supply parts of the animation. 
-One event has a number which grows and a small number which seems to reference the 
-segment groups from the x8an??.bin file [7]. TODO: check this.
+Notes:
+* see also [5]
+* one animation "stream" can contain multiple animations. `start_frame` and `number_of_frames` select the part
+  of the animation stream which should be played.
+* some animations are placed in the corresponding x8an* file. In this case the 12th bit is set. Bitmask: 0x1000
+* the animation group is selected by the mesh file, see discussion in [7]
+
+## Known Animations:
+
+| Type | Description     |
+|------|-----------------|
+| 0x00 | idle            |
+| 0x10 | hit             |
+| 0x20 | block           |
+| 0x30 | unknown         |
+| 0x40 | unknown         |
+| 0x50 | unknown         |
+| 0x60 | ranged attack?? |
+| 0x70 | attack          |
+| 0x80 | unknown         |
+| 0x90 | unknown         |
+| 0xa0 | unknown         |
+
+## Some notes:
+
+| Character | type      | Frames     | Animation name
+|-----------|-----------|------------|----------------
+| Synbios a |  0x00     |   1 -  35  | idle
+| Synbios e |  0x10     |  35 -  85  | attack
+| Synbios a |  0x20     |  85 - 105  | block
+| Synbios a |  0x70     | 105 - 133  | hit
+|-----------|-----------|------------|----------------
+| Synbios e |  0x00     |   1 -  35  | idle
+| Synbios e |  0x10     |  35 -  85  | attack
+| Synbios e |  0x20     |  85 - 105  | block
+| Synbios e |  0x70     | 105 - 133  | hit
+
+* frame start + frame count is exclusive, so the last frame is not played
+
 
 ## AnimationEvent
 
 | Offset | Name                     | Type        | Count        | Description
-+--------+--------------------------+-------------+--------------+-----------------------------
-| 0x00   | frame                    | uint16      |   1          | unknown
-| 0x02   | eventCode                | uint16      |   1          | unknown
+|--------|--------------------------|-------------|--------------|-----------------------------
+| 0x00   | frame                    | uint16      |   1          | frame at which the event occurs
+| 0x02   | eventCode                | uint16      |   1          | event id to trigger
 
-Note: a 0xffff denotes the end of the animation event list.
-Note: the eventCode is a small positive integer. Maybe this is a reference into the animation file [7].
+Note:
+* a 0xffff denotes the end of the animation event list.
+* the event code may be some sound trigger or similar.
 
 # BoneKeyframes
 
-Each bone in the skeleton has an attached keyframe list which is used to animate the bone through interpolation.
-The BoneKeyframes Header is repeated once for each bone (see skeleton), additionally the end of the list is denoted
-by 0xffff ffff.
-
-| Offset | Name                | Type   | Count | Description
-+--------+---------------------+--------+-------+-----------------------------
-| 0x00   | translation_keys    | uint32 |   1   | number of key frames in translation channel
-| 0x04   | rotation_keys       | uint32 |   1   | number of key frames in rotation channel
-| 0x08   | scale_keys          | uint32 |   1   | number of key frames in scale channel
-| 0x0c   | translation_times   | uint32 |   1   | offset to translation frame numbers
-| 0x10   | rotation_times      | uint32 |   1   | offset to rotation frame numbers
-| 0x14   | scale_times         | uint32 |   1   | offset to scale frame numbers
-| 0x18   | translation_x       | uint32 |   1   | offset to translation x component
-| 0x1c   | translation_y       | uint32 |   1   | offset to translation y component
-| 0x20   | translation_z       | uint32 |   1   | offset to translation z component
-| 0x24   | rotation_x          | uint32 |   1   | offset to rotation axis x
-| 0x28   | rotation_y          | uint32 |   1   | offset to rotation axis y
-| 0x2c   | rotation_z          | uint32 |   1   | offset to rotation axis z
-| 0x30   | rotation_angle      | uint32 |   1   | offset to rotation angle
-| 0x34   | scale_x             | uint32 |   1   | offset to scale x component
-| 0x38   | scale_y             | uint32 |   1   | offset to scale y component
-| 0x3c   | scale_z             | uint32 |   1   | offset to scale z component
-
-Notes:
-* Translation components are stored as FIXED.
-* Rotation axis is stored as kinda half FIXED. It is the decimal uint16 part of a FIXED. The integer part is always 
-  zero, as the axis vector has to be a normalized vector. Also note that the axis components are always positive.
-* Rotation angle is stored as ANGLE
-* Scale components are stored as FIXED and are mostly 1.0. In Masquirin the scale is not exactly 1.0, 
-  but slightly more or less
-  
-# Example: Dantates Bone 0 (x8pc02b.bin)
-
-    "translation": {
-      "0": "[ 0.0000 , 0.0000 , 0.4399 ]",
-      "10": "[ 0.0000 , 0.4051 , 0.4399 ]",
-      "19": "[ 0.0000 , 0.0270 , 0.4399 ]",
-      ...
-      "429": "[ 0.0000 , 0.1389 , 0.4399 ]"
-    },
-    "rotation": {
-      "0": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "110": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "131": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "140": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "250": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "261": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "270": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]",
-      "380": "[ 0.0000 , 0.0000 , 0.0000, 1.5707964 ]"
-    },
-    "scale": {
-      "0": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "110": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "131": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "140": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "250": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "261": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "270": "[ 0.9556 , 1.0303 , 1.0084 ]",
-      "380": "[ 0.9556 , 1.0303 , 1.0084 ]"
-    }
-
+The bone keyframes are in the same format as the animations in [7]. Note that the offsets are relative to the animation
+chunk start.
 
 # Notes & Discussions
+
+## Mesh Names
+
+| Nr | Character
+|-----|-------------
+| 00a | Synbios Sword
+| 00b | Synbios Rapier
+| 00c | Synbios Blade
+| 00d | Synbios Knife (note: no useable weapon tag)
+| 00e | Synbios Sword
+| 00f | Synbios Rapier
+| 00g | Synbios Blade
+| 00h | Synbios Knife (note: no useable weapon tag)
+|-----|-------------
+| 01a | Dantares Lance
+| 01b | Dantares Spear  (note: no useable weapon tag)
+| 01c | Dantares Halberd
+| 01e | Dantares Lance
+| 01f | Dantares Spear  (note: no useable weapon tag)
+| 01g | Dantares Halberd
+|-----|-------------
+| 02a | Masquirin Rod
+| 02b | Masquirin Wand
+| 02c | Masquirin Ankh
+| 02e | Masquirin Rod
+| 02f | Masquirin Wand
+| 02g | Masquirin Ankh
+|-----|-------------
+| 03a | Grace Rod (note: does not import correctly)
+| 03b | Grace Wand (note: no useable weapon tag)
+| 03c | Grace Ankh
+| 03e | Grace Rod
+| 03f | Grace Wand
+| 03g | Grace Ankh
+|-----|-------------
+| 04 | Hayward
+| 05 | Obright
+| 06 | Irene
+| 07 | Julian
+| 08 | Cybel
+| 09 | Eldar
+| 10 | Kahn
+| 11 | Noon (promoted only)
+| 12 | Justin (promoted only)
+| 13 | Horst (promoted only)
+| 14 | Pen
+| 15 | Ratchet
+| 16 | Frank
+| 17 | Hagane
+| 18 | Murasame
+| 19 | Fynnding
+|-----|-------------
+| 700 | Bat/Dragon (note: skeleton is not imported correctly)
+| 701 | Soldier with pike
+| 702 | Heavy Soldier with Axe
+| 704 | Horse Knight with Lance
+| 705 | Horse Knight with Lance
+| 707 | Horse Knight with Bow
+| 709 | Knight with Lance 
+| 713 | Heavy Knight with Mace
+| 715 | Lizard with Axe
+| 717 | Hell Hound
+| 718 | Cerberus
+| 719 | Goblin with Knife
+| 720 | Dwarf with Axe
+| 721 |
+|...|...
+| 900 | Dragon
+| 901 | Strange head
+| 902 | Mage
+| 903 | Collosus one arm
+| 904 | Collosus Head
+
 
 ## Mesh Parts
 
@@ -432,25 +485,8 @@ The mesh is structured in a simple hierarchy, where each node can transform (tra
 So it is not really a skeleton animation.
 We can draw the meshes simply without any transformations and the result looks like the model should be. So each (mesh) 
 part of the model is already pre transformed and the model without any skeleton hierarchy can be treated as a 
-"idle pose". I'd expect that the translations in the BoneKeyframes would start at frame 1 with nearly no translation or 
-rotation, so frame 0 is kinda the bind pose. During animation with ascending frames there should be only a small 
-transformation in each bone (or joint), as these transformation stack upon each other. This is the result of each
-slPushMatrix() call copying the current transformation matrix and applying the next joints transformation on the 
-last matrix.
-
-Strangely the transformation are way bigger than expected and point in strange directions.
-
-Examples are from Synbios + Sword (x8pc00a.bin)
-
-Bone 0 is the model root bone. In frame 1 the translation is [ 0.0000 , 2.5119 , 0.0353 ], which places the  
-model 2.5 units below the ground level (note: the model "grows" in negative y direction, see [3] chapter 4, 
-Coordinate System). 
-Bone 1 places the hip and is [ -1.5118 , -14.4179 , -1.5453 ]. This moves the hip above the ground again, but
-slightly (about 1.5 units) to the left and back. This happens with all bones. The model which looks good without
-a bone hierarchy looks very fragmented with the bone hierarchy.
-
-So either the BoneKeyframes interpretation is wrong or the interactions between the skeleton and the BoneKeyframes
-is not the way I thought.
+bind pose. The animations transforms the mesh in the order translation, rotation, scale. Remember to apply these 
+transformations in reverse order when doing matrix multiplication.
 
 
 # References

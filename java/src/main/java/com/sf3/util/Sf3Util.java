@@ -12,10 +12,8 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.*;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
@@ -66,6 +64,10 @@ public class Sf3Util {
     }
 
     public static List<TextureUv> writeTextureImage(List<BufferedImage> textures, Set<Integer> solidColors, String textureFileName, int textureIndexStart, boolean annotate) {
+        if (textures.size() == 0 && solidColors.size() == 0) {
+            return Collections.emptyList();
+        }
+
         int maxHeight = 512;
         int solidColorsSize = 8;
         List<TextureUv> uvs = new ArrayList<>();
@@ -90,6 +92,11 @@ public class Sf3Util {
         // how many more columns do we need to represent the solid colors?
         int colorsFittingInColumn = maxHeight / solidColorsSize;
         int additionalColumns = (remainingColors + colorsFittingInColumn - 1) / colorsFittingInColumn;
+        // if we don't have a texture column and still need some space for solid colors
+        if (currentHeight == 0 && solidColors.size() > 0) {
+            // allocate an additional column
+            additionalColumns++;
+        }
 
         int totalWidth = textureColumns.stream().map(TextureColumn::getMaxWidth).mapToInt(Integer::valueOf).sum();
 
@@ -121,7 +128,12 @@ public class Sf3Util {
                 x += column.getMaxWidth();
             }
         }
-        int currentWidth = textureColumns.get(textureColumns.size()-1).getMaxWidth();
+        int currentWidth = textureColumns.stream()
+                .reduce((first, second) -> first)
+                .map(TextureColumn::getMaxWidth)
+                .stream().mapToInt(Integer::intValue)
+                .findFirst()
+                .orElseGet(() -> 0);
         for (int color : solidColors) {
             int rgb = Sf3Util.rgb16ToRgb24(color);
             graphics.setColor(new Color(rgb));

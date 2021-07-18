@@ -69,106 +69,36 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         name="Rotation",
         subtype='EULER',
     )
-    # show only the JSON files
-    filename_ext = ".json"
     filter_glob = StringProperty(default = "*.json", options = {'HIDDEN'})
 
     def execute(self, context):
-        return self.read_some_data(context, self.filepath)
-
-    def add_box(self, corner_min, corner_max):
-        """
-        This function takes inputs and returns vertex and face arrays.
-        no actual mesh data creation is done here.
-        """
-
-        verts = [
-            (corner_max[0], corner_max[1], corner_min[2]),
-            (corner_max[0], corner_min[1], corner_min[2]),
-            (corner_min[0], corner_min[1], corner_min[2]),
-            (corner_min[0], corner_max[1], corner_min[2]),
-            (corner_max[0], corner_max[1], corner_max[2]),
-            (corner_max[0], corner_min[1], corner_max[2]),
-            (corner_min[0], corner_min[1], corner_max[2]),
-            (corner_min[0], corner_max[1], corner_max[2]),
-        ]
-
-        faces = [
-            (0, 1, 2, 3),
-            (4, 7, 6, 5),
-            (0, 4, 5, 1),
-            (1, 5, 6, 2),
-            (2, 6, 7, 3),
-            (4, 0, 3, 7),
-        ]
-
-        mesh = bpy.data.meshes.new("Box")
-
-        bm = bmesh.new()
-
-        for v_co in verts:
-            bm.verts.new(v_co)
-
-        bm.verts.ensure_lookup_table()
-        for f_idx in faces:
-            bm.faces.new([bm.verts[i] for i in f_idx])
-
-        bm.to_mesh(mesh)
-        mesh.update()
-        return mesh
+        return self.read_model(context, self.filepath)
 
     def create_material(self, context, file_data, path):
-
         materials = bpy.data.materials
 
         textures_chunk = file_data.get("textures")
+        # no texture for this model
+        if "textureFileName" not in textures_chunk:
+            return None
+
         texture_file_name = textures_chunk.get("textureFileName")
         texture_name = os.path.splitext(texture_file_name)[0]
 
-        # material already imported?
+        # material already imported? Don't change the already imported material
         material = materials.get(texture_name)
         if material:
             return material
 
+        # create and link texture nodes
         mat = bpy.data.materials.new(name=texture_name)
         mat.use_nodes = True
         bsdf = mat.node_tree.nodes["Principled BSDF"]
         tex_image = mat.node_tree.nodes.new('ShaderNodeTexImage')
         texture_full_path = os.path.join(path, texture_file_name)
-        print("texture_full_path: {}".format(texture_full_path))
         tex_image.image = bpy.data.images.load(texture_full_path)
         mat.node_tree.links.new(bsdf.inputs['Base Color'], tex_image.outputs['Color'])
         return mat
-
-    def create_animation_actions(self, context, file_data, meshes):
-        animations = file_data.get("animations").get("bone_key_frames")
-
-        print("animations:{}".format(len(animations)))
-
-        for i, mesh in enumerate(meshes):
-            print("mesh {} {}".format(i, mesh))
-            animation = list(animations.values())[i+4]
-
-            for frame, location in animation.get("translation").items():
-                mesh.location = json.loads(location)
-                mesh.keyframe_insert(data_path='location', frame=int(frame))
-
-            mesh.rotation_mode = "AXIS_ANGLE"
-            for frame, quarternion in animation.get("rotation").items():
-                values = json.loads(quarternion)
-                mesh.rotation_axis_angle = [values[1], values[2], values[3], values[0]]
-                mesh.keyframe_insert(data_path='rotation_quaternion', frame=int(frame))
-
-#            action = bpy.data.actions.new("{}.action".format(mesh.name))
-#            fcurve = action.fcurves.new("location")
-#            fcurve.keyframe_points.add(count=len(translation_list))
-
-#            fcurve.keyframe_points.foreach_set("co", [x for co in zip(translation_list.keys(), translation_list.values()) for x in co])
-            # update
-#            fcurve.update()
-            # assign to context ob
-#            animation_data = mesh.animation_data_create()
-#            animation_data.action = action
 
     def create_skeleton(self, context, file_data, meshes):
         animations = list(file_data.get("animations").get("bone_key_frames").values())
@@ -211,9 +141,6 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
             mesh.parent = armature_object
             mesh.parent_type = "BONE"
             last_mesh.parent_bone = tags[0x30].name
-            print(tags[0x30].parent_recursive)
-            parents = ".".join([parent.name for parent in tags[0x30].parent_recursive].reverse())
-            print("added weapon to {}.{}".format(parents, tags[0x30].name))
 
         # in pose mode animations can be created
         bpy.ops.object.mode_set(mode='POSE')
@@ -242,6 +169,7 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         return tags
 
     def filter_frames(self, animations, min_frame, max_frame):
+        """Filters the frames dictionary to only contain frames with min_frame and max_frame (inclusive)."""
         return {anim[0]: anim[1] for anim in animations.items() if min_frame <= int(anim[0]) <= max_frame}
 
     def create_animation_action(self, animations, armature_object, pose_bones, action_name, min_frame, max_frame):
@@ -329,90 +257,22 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
                 type = child.get("type")
                 tag = self.create_bone(context, armature, current_bone, "tag {}".format(type))
                 tags[type] = tag
+                # save transformations as custom properties. These can only be set in pose mode afterwards
                 tag["location"] = json.loads(child.get("translation"))
                 if "rotation" in child:
                     rotation_values = json.loads(child.get("rotation"))
+                    # convert x,y,z,w (Saturn) to w,x,y,z (Blender)
                     tag["rotation_quaternion"] = [rotation_values[3], rotation_values[0], rotation_values[1],
                                                   rotation_values[2]]
                 if "scale" in child:
                     tag["scale"] = json.loads(child.get("scale"))
 
-
         if "childs" in bone_desc:
             for child in bone_desc["childs"]:
                 self.process_skeleton_bone_with_armature(context, armature, child, current_bone, animations, meshes, tags)
 
-    def create_skeleton_with_empty(self, context, file_data, meshes):
-        animations = list(file_data.get("animations").get("bone_key_frames").values())
-        skeleton = file_data.get("meshes").get("skeleton")
-        mesh_root = self.create_empty(context, "mesh_root")
-        # rotate the model so up is in positive z (blender) instead of negative y (saturn)
-        mesh_root.rotation_euler[0] = -math.pi / 2
-        # scale to 10%
-        mesh_root.scale = [0.1, 0.1, 0.1]
-
-        tags = {}
-
-        for child in skeleton["childs"]:
-            self.process_skeleton_bone_with_empty(context, child, mesh_root, animations, meshes, tags)
-        return tags
-
-    def process_skeleton_bone_with_empty(self, context, bone_desc, bone, animations, meshes, tags):
-        if "index" in bone_desc:
-            # create new bone
-            bone_index = bone_desc["index"]
-            current_bone = self.create_empty(context, "bone[{}]".format(bone_index))
-            current_bone.parent = bone
-            current_bone.rotation_mode = 'QUATERNION'
-
-            animation = animations[bone_index]
-            for frame, location in animation.get("translation").items():
-                current_bone.location = json.loads(location)
-                current_bone.keyframe_insert(data_path='location', frame=int(frame))
-
-            for frame, rotation in animation.get("rotation").items():
-                rotation_values = json.loads(rotation)
-                current_bone.rotation_quaternion = [rotation_values[3], rotation_values[0], rotation_values[1], rotation_values[2]]
-                current_bone.keyframe_insert(data_path='rotation_quaternion', frame=int(frame))
-
-            for frame, scale in animation.get("scale").items():
-                scale_values = json.loads(scale)
-                current_bone.scale = scale_values
-                current_bone.keyframe_insert(data_path='scale', frame=int(frame))
-        else:
-            current_bone = bone
-
-        if "meshes" in bone_desc:
-            for mesh_id in bone_desc["meshes"]:
-                mesh = meshes[mesh_id]
-                mesh.parent = current_bone
-
-        if "tags" in bone_desc:
-            for child in bone_desc["tags"]:
-                type = child.get("type")
-                tag = self.create_empty(context, "tag {}".format(type))
-                tag.rotation_mode = 'QUATERNION'
-                tag.parent = current_bone
-
-                tag.location = json.loads(child.get("translation"))
-
-                if "rotation" in child:
-                    rotation_values = json.loads(child.get("rotation"))
-                    tag.rotation_quaternion = [rotation_values[3], rotation_values[0], rotation_values[1],
-                                               rotation_values[2]]
-
-                if "scale" in child:
-                    tag.scale = json.loads(child.get("scale"))
-
-                tags[type] = tag
-
-
-        if "childs" in bone_desc:
-            for child in bone_desc["childs"]:
-                self.process_skeleton_bone(context, child, current_bone, animations, meshes, tags)
-
-    def read_some_data(self, context, filepath):
-        print("running read_some_data...{}".format(filepath))
+    def read_model(self, context, filepath):
+        print("running read_model...{}".format(filepath))
         f = open(filepath, 'r', encoding='utf-8')
         data = f.read()
         f.close()
@@ -440,33 +300,23 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         box_object = object_utils.object_data_add(context, box_mesh, operator=self)
         box_object.parent = mesh_root
 
-    def create_empty(self, context, name):
-        mesh_root = bpy.data.objects.new( "empty", None )
-        mesh_root.name = name
-        mesh_root.empty_display_size = 1
-        mesh_root.empty_display_type = 'CUBE'
-        context.collection.objects.link(mesh_root)
-        return mesh_root
-
     def create_meshes(self, context, file_data, texture_material):
         mesh_chunk = file_data.get("meshes")
-        # objects = bpy.data.objects
         body_meshes = mesh_chunk.get("body_meshes")
         meshes = []
 
-
         for name, mesh in body_meshes.items():
             mesh_object = self.create_mesh(context, file_data, mesh, name)
-            # mesh_object.parent = mesh_root
-            mesh_object.data.materials.append(texture_material)
+            if texture_material is not None:
+                mesh_object.data.materials.append(texture_material)
             meshes.append(mesh_object)
             print("added mesh {}".format(name))
 
         weapon_mesh = mesh_chunk.get("weaponMesh")
         if weapon_mesh is not None:
             mesh_object = self.create_mesh(context, file_data, weapon_mesh, "weapon_mesh")
-            # mesh_object.parent = mesh_root
-            mesh_object.data.materials.append(texture_material)
+            if texture_material is not None:
+                mesh_object.data.materials.append(texture_material)
             meshes.append(mesh_object)
             print("added weapon mesh")
 
@@ -519,20 +369,6 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         return mesh_object
 
 
-# some action
-# a = bpy.data.actions.new("SomeAction")
-# fc = a.fcurves.new("location", 1, "LocY")
-
-# fc.keyframe_points.add(count=len(frames))
-# populate points
-
-# fc.keyframe_points.foreach_set("co", [x for co in zip(frames, samples) for x in co])
-# update
-# fc.update()
-# assign to context ob
-# ad = bpy.context.object.animation_data_create()
-# ad.action = a
-
 # https://blender.stackexchange.com/questions/135759/is-it-possible-to-create-an-animation-in-blender-2-8-using-python-that-its-no
 # https://blender.stackexchange.com/a/64450
 # http://web.purplefrog.com/~thoth/blender/python-cookbook/animate-random-spin.html
@@ -540,16 +376,16 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
 def menu_func(self, context):
     self.layout.operator(ImportSf3BattleModel.bl_idname)
 
+
 def register():
     bpy.utils.register_class(ImportSf3BattleModel)
     bpy.types.TOPBAR_MT_file_import.append(menu_func)
+
 
 def unregister():
     bpy.utils.unregister_class(ImportSf3BattleModel)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func)
 
 
-# This allows you to run the script directly from Blender's Text editor
-# to test the add-on without having to install it.
 if __name__ == "__main__":
     register()

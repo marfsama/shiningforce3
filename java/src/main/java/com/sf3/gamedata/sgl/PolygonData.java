@@ -51,10 +51,15 @@ public class PolygonData extends Block {
         addProperty("polygonAttributesOffset", new HexValue(polygonAttributesOffset));
     }
 
-    public void readDetails(byte[] data, int offset_after_header) throws IOException {
-        ImageInputStream stream = new ByteArrayImageInputStream(data);
-        stream.setByteOrder(ByteOrder.BIG_ENDIAN);
-        readDetails(stream, offset_after_header);
+    public void readDetails2(ImageInputStream stream, int chunkStart) throws IOException {
+        stream.seek(pointsOffset + chunkStart);
+        this.points = IntStream.range(0, numPoints).mapToObj(t -> readPoint(stream)).collect(Collectors.toList());
+
+        stream.seek(polygonOffset + chunkStart);
+        this.polygons = IntStream.range(0, numPolygons).mapToObj(t -> readPolygon(stream)).collect(Collectors.toList());
+
+        stream.seek(polygonAttributesOffset + chunkStart);
+        this.polygonAttributes = IntStream.range(0, numPolygons).mapToObj(t -> readPolygonAttribute(stream)).collect(Collectors.toList());
     }
 
     public void readDetails(ImageInputStream stream, int offset_after_header) throws IOException {

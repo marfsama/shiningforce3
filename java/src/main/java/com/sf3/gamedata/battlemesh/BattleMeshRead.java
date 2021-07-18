@@ -2,7 +2,6 @@ package com.sf3.gamedata.battlemesh;
 
 import com.google.common.collect.Streams;
 import com.sf3.gamedata.sgl.Point;
-import com.sf3.gamedata.sgl.Polygon;
 import com.sf3.gamedata.utils.Block;
 import com.sf3.gamedata.utils.HexValue;
 import com.sf3.gamedata.mpd.DecompressedStream;
@@ -10,7 +9,6 @@ import com.sf3.gamedata.sgl.*;
 import com.sf3.util.ByteArrayImageInputStream;
 import com.sf3.util.Sf3Util;
 import com.sf3.util.Utils;
-import com.sf3.util.WavefrontObjWriter;
 
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
@@ -27,73 +25,109 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class BattleMeshRead {
     private static final String basePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk/bin";
 
     public static void main(String[] args) throws IOException {
         analyzeFiles();
-//        dumpAllMeshes();
-//        dumpMesh("x8pc03a.bin");
+//        readAnimationFiles();
     }
 
-    private static void dumpMesh(String filename) {
-        Path path = Paths.get(basePath, filename);
-
-        Block block = readFile(path);
-        Block meshes = block.getBlock("meshes");
-        Block textures = block.getBlock("textures");
-        dumpMeshes(meshes, textures, Paths.get(filename+".obj"));
+    private static void readAnimationFiles() throws IOException {
+        readAnimationFile("x8an00");
+        readAnimationFile("x8an01");
+        readAnimationFile("x8an02");
+        readAnimationFile("x8an03");
+        readAnimationFile("x8an70");
     }
 
-    private static void dumpAllMeshes() {
-        try (Stream<Path> files = Files.walk(Paths.get(basePath))) {
-            files.filter(f -> f.getFileName().toString().startsWith("x8pc"))
-                    .map(f -> {
-                        try {
-                            return readFile(f);
-                        }
-                        catch (Exception e) {
-                            e.printStackTrace();
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .forEach(block -> {
-                        Block meshes = block.getBlock("meshes");
-                        Block textures = block.getBlock("textures");
-                        String filename = block.getObject("filename");
-                        dumpMeshes(meshes, textures, Paths.get(filename+".obj"));
-                    });
-        } catch (IOException e) {
-            e.printStackTrace();
+    private static Block readAnimationFile(String filename) throws IOException {
+        Path path = Paths.get(basePath, filename + ".bin");
+        Path outPath = Paths.get(filename + "_full.json");
+        if (!Files.exists(path) || Files.size(path) < 10) {
+            return null;
         }
+
+        try (InputStream is = Files.newInputStream(path)) {
+            ImageInputStream stream = wrapInByteArray(is);
+            stream.setByteOrder(ByteOrder.BIG_ENDIAN);
+
+            Block file = new Block(path.getFileName().toString(), 0, (int) Files.size(path));
+
+            int segmentNo = 0;
+            while (stream.getStreamPosition() < Files.size(path)) {
+                Block segment = file.createBlock("segment["+segmentNo+"]", (int) stream.getStreamPosition(), 0);
+                int boneNo = 0;
+                int tableOffset = stream.readInt();
+                if (tableOffset == -1) {
+                    break;
+                }
+                stream.seek(tableOffset+segment.getStart());
+                while (stream.getStreamPosition() < Files.size(path)) {
+                    Block block = readBoneKeyFrames(stream, segment.getStart(), boneNo);
+                    if (block == null) {
+                        break;
+                    }
+                    segment.addBlock(block);
+                    boneNo++;
+                }
+                // drain padding to next segment
+                while (stream.getStreamPosition() < Files.size(path)) {
+                    int data = stream.readInt();
+                    if (data != 0) {
+                        // seek back last read value and stop consuming padding
+                        stream.seek(stream.getStreamPosition()-4);
+                        break;
+                    }
+                }
+                segmentNo++;
+            }
+
+            System.out.println("write: " + outPath.toAbsolutePath().toString());
+            Files.writeString(outPath, Utils.toPrettyFormat(file.toString()));
+
+            return file;
+        }
+        catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
+    }
+
+    private static ImageInputStream wrapInByteArray(InputStream is) throws IOException {
+        byte[] content = is.readAllBytes();
+        return new ByteArrayImageInputStream(content);
     }
 
     private static void analyzeFiles() {
-        int[] nums = new int[] {0,1,2,3};
-        String[] letters = new String[] {"a","b","c","e","f","g"};
+        String[] letters = new String[] {"a","b","c", "d","e","f","g", "h"};
 
         List<String> files = new ArrayList<>();
-        for (int num : nums) {
+        for (int num = 0; num <= 3; num++) {
             for (String letter : letters) {
                 files.add(String.format("x8pc%02d%s", num, letter));
             }
         }
 
-        //files.forEach(BattleMeshRead::analyzeFile);
-        BattleMeshRead.analyzeFile("x8pc700");
+//        files.forEach(BattleMeshRead::analyzeFile);
+
+        for (int i = 700; i <= 710; i++) {
+            BattleMeshRead.analyzeFile(String.format("x8pc%03d", i));
+        }
     }
 
     private static void analyzeFile(String fileName) {
         try {
             Path path = Paths.get(basePath, fileName + ".bin");
             Path outPath = Paths.get(fileName + "_full.json");
+            if (!Files.exists(path) || Files.size(path) < 10) {
+                return;
+            }
 
             Block file = readFile(path);
             addStatistics(file);
-            System.out.println("wite: " + outPath.toAbsolutePath().toString());
+            System.out.println("write: " + outPath.toAbsolutePath().toString());
             Files.writeString(outPath, Utils.toPrettyFormat(file.toString()));
         }
         catch (IOException ioe) {
@@ -196,9 +230,9 @@ public class BattleMeshRead {
     }
 
     private static List<String> getAnimationsTable(Block animations) {
-        String line = "\"| %d | %13s | %4s (%4d) | %8s | %8s | %9d | %s |\"";
+        String line = "\"| %d |        0x%04X | %4s (%4d) | %8s | %8s | %9d | %s |\"";
         List<String> table = new ArrayList<>();
-        table.add("\"| No | Animation Id | Frames      | unknown2 | distance | No events | events |\"");
+        table.add("\"| No | Start Frame  | Frames      | unknown2 | distance | No events | events |\"");
         table.add("\"+----+--------------+-------------+----------+----------+-----------+--------+\"");
         AtomicInteger i = new AtomicInteger();
         List<String> lines = animations.getProperties().values().stream()
@@ -206,7 +240,7 @@ public class BattleMeshRead {
                 .map(animation -> {
                             return String.format(line,
                                     i.getAndIncrement(),
-                                    animation.getObject("start_frame"),
+                                    animation.getInt("start_frame"),
                                     animation.getObject("numberOfFrames"),
                                     animation.getInt("numberOfFrames"),
                                     animation.getObject("type"),
@@ -229,53 +263,6 @@ public class BattleMeshRead {
         BoundingBox boundingBox = new BoundingBox();
         polygonDataExtended.getPoints().forEach(boundingBox::addPoint);
         return boundingBox;
-    }
-
-    private static void dumpAttributes(Block meshes) {
-        for (int i = 0; i < meshes.getInt("numMeshes"); i++){
-            String name = "mesh[" + i + "]";
-            dumpAttribute(name, meshes.getBlock(name));
-        }
-        dumpAttribute("weaponMesh", meshes.getBlock("weaponMesh"));
-    }
-
-    private static void dumpAttribute(String name, PolygonDataExtended mesh) {
-        System.out.println(name);
-        mesh.getPolygonAttributes().forEach(System.out::println);
-    }
-
-
-    private static void dumpMeshes(Block meshes, Block textures, Path destination) {
-        WavefrontObjWriter obj = new WavefrontObjWriter();
-        String textureFilename = textures.getObject("textureFileName");
-        obj.setMaterialLibrary(textureFilename);
-        obj.setMaterial("textured");
-        for (int i = 0; i < meshes.getInt("numMeshes"); i++){
-            String name = "mesh[" + i + "]";
-            dumpMesh(obj, name, meshes.getBlock(name));
-        }
-        dumpMesh(obj, "weaponMesh", meshes.getBlock("weaponMesh"));
-
-        try {
-            Files.write(destination, obj.toString().getBytes());
-            System.out.println("written to "+destination);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static void dumpMesh(WavefrontObjWriter obj, String name, PolygonDataExtended mesh) {
-        obj.nextGroup(name);
-        mesh.getPoints().stream().forEach(p -> obj.addVertex(p.getX().toFloat(), p.getY().toFloat(), p.getZ().toFloat()));
-        for (int i = 0; i < mesh.getPolygons().size(); i++) {
-            Polygon polygon = mesh.getPolygons().get(i);
-            PolygonAttribute attributes = mesh.getPolygonAttributes().get(i);
-
-            List<Integer> vertices = Arrays.stream(polygon.getVertexIndices()).mapToObj(Integer::valueOf).collect(Collectors.toList());
-            List<Integer> textureVertices = null;
-            obj.addFace(vertices, textureVertices);
-
-        }
     }
 
     public static Block readFile(Path path) {
@@ -329,7 +316,9 @@ public class BattleMeshRead {
 
         List<TextureUv> uvs = Sf3Util.writeTextureImage(images, colors, filename, 0, false);
         textures.addProperty("uvs", uvs);
-
+        if (uvs.isEmpty()) {
+            textures.removeProperty("textureFileName");
+        }
 
     }
 
@@ -391,51 +380,61 @@ public class BattleMeshRead {
 
         stream.seek((long) chunk.getBlock("header").getInt("bone_key_frames_offset") + chunk.getStart());
         Block boneKeyFrames = chunk.createBlock("bone_key_frames", chunk.getStart(), 0);
-        int i = 0;
+        int boneNo = 0;
         while (true) {
-            int translationKeyFrames = stream.readInt();
-            if (translationKeyFrames == 0xffffffff)  {
+            Block block = readBoneKeyFrames(stream, chunk.getStart(), boneNo);
+            if (block == null) {
                 break;
             }
-            Block entry = boneKeyFrames.createBlock("bone["+i+"]", (int) stream.getStreamPosition(), 16*4);
-            int rotationKeyFrames = stream.readInt();
-            int scaleKeyFrames = stream.readInt();
-
-            entry.addProperty("translation_key_frames", new HexValue(translationKeyFrames));
-            entry.addProperty("rotation_key_frames", new HexValue(rotationKeyFrames));
-            entry.addProperty("scale_key_frames", new HexValue(scaleKeyFrames));
-            List<HexValue> offsets = new ArrayList<>();
-            for (int o = 0; o < 13; o++) {
-                offsets.add(new HexValue(stream.readInt()+chunk.getStart()));
-            }
-            entry.addProperty("_offsets", offsets);
-            long tempOffset = stream.getStreamPosition();
-            List<Integer> translationTimes = readList(stream, translationKeyFrames, offsets.get(0).getValue(), BattleMeshRead::readShort);
-            List<Integer> rotationTimes = readList(stream, rotationKeyFrames, offsets.get(1).getValue(), BattleMeshRead::readShort);
-            List<Integer> scaleTimes = readList(stream, scaleKeyFrames, offsets.get(2).getValue(), BattleMeshRead::readShort);
-
-            List<Fixed> translationX = readList(stream, translationKeyFrames, offsets.get(3).getValue(), BattleMeshRead::readSglFixed);
-            List<Fixed> translationY = readList(stream, translationKeyFrames, offsets.get(4).getValue(), BattleMeshRead::readSglFixed);
-            List<Fixed> translationZ = readList(stream, translationKeyFrames, offsets.get(5).getValue(), BattleMeshRead::readSglFixed);
-
-            List<Fixed> rotationX = readList(stream, rotationKeyFrames, offsets.get(6).getValue(), BattleMeshRead::readHalfSglFixed);
-            List<Fixed> rotationY = readList(stream, rotationKeyFrames, offsets.get(7).getValue(), BattleMeshRead::readHalfSglFixed);
-            List<Fixed> rotationZ = readList(stream, rotationKeyFrames, offsets.get(8).getValue(), BattleMeshRead::readHalfSglFixed);
-            List<Fixed> rotationTheta = readList(stream, rotationKeyFrames, offsets.get(9).getValue(), BattleMeshRead::readHalfSglFixed);
-
-            List<Fixed> scaleX = readList(stream, scaleKeyFrames, offsets.get(10).getValue(), BattleMeshRead::readSglFixed);
-            List<Fixed> scaleY = readList(stream, scaleKeyFrames, offsets.get(11).getValue(), BattleMeshRead::readSglFixed);
-            List<Fixed> scaleZ = readList(stream, scaleKeyFrames, offsets.get(12).getValue(), BattleMeshRead::readSglFixed);
-
-            entry.addProperty("translation", zip(translationTimes, zipPoints(translationX, translationY, translationZ)));
-            entry.addProperty("rotation", zip(rotationTimes, zipRotations(rotationX, rotationY, rotationZ, rotationTheta)));
-            entry.addProperty("scale", zip(scaleTimes, zipPoints(scaleX, scaleY, scaleZ)));
-
-            stream.seek(tempOffset);
-            i++;
+            boneKeyFrames.addBlock(block);
+            boneNo++;
         }
         header.addProperty("_bone_key_frames_end", new HexValue((int) stream.getStreamPosition()));
         return chunk;
+    }
+
+    private static Block readBoneKeyFrames(ImageInputStream stream, int localOffset, int boneNo) throws IOException {
+        int translationKeyFrames = stream.readInt();
+        if (translationKeyFrames == 0xffffffff)  {
+            return null;
+        }
+        Block entry = new Block("bone["+ boneNo +"]", (int) stream.getStreamPosition(), 16*4);
+        int rotationKeyFrames = stream.readInt();
+        int scaleKeyFrames = stream.readInt();
+        entry.addProperty("start", new HexValue(entry.getStart()));
+
+        entry.addProperty("translation_key_frames", new HexValue(translationKeyFrames));
+        entry.addProperty("rotation_key_frames", new HexValue(rotationKeyFrames));
+        entry.addProperty("scale_key_frames", new HexValue(scaleKeyFrames));
+        List<HexValue> offsets = new ArrayList<>();
+        for (int o = 0; o < 13; o++) {
+            offsets.add(new HexValue(stream.readInt()+ localOffset));
+        }
+        entry.addProperty("offsets", offsets);
+        long tempOffset = stream.getStreamPosition();
+        List<Integer> translationTimes = readList(stream, translationKeyFrames, offsets.get(0).getValue(), BattleMeshRead::readShort);
+        List<Integer> rotationTimes = readList(stream, rotationKeyFrames, offsets.get(1).getValue(), BattleMeshRead::readShort);
+        List<Integer> scaleTimes = readList(stream, scaleKeyFrames, offsets.get(2).getValue(), BattleMeshRead::readShort);
+
+        List<Fixed> translationX = readList(stream, translationKeyFrames, offsets.get(3).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> translationY = readList(stream, translationKeyFrames, offsets.get(4).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> translationZ = readList(stream, translationKeyFrames, offsets.get(5).getValue(), BattleMeshRead::readSglFixed);
+
+        List<Fixed> rotationX = readList(stream, rotationKeyFrames, offsets.get(6).getValue(), BattleMeshRead::readCompressedSglFixed);
+        List<Fixed> rotationY = readList(stream, rotationKeyFrames, offsets.get(7).getValue(), BattleMeshRead::readCompressedSglFixed);
+        List<Fixed> rotationZ = readList(stream, rotationKeyFrames, offsets.get(8).getValue(), BattleMeshRead::readCompressedSglFixed);
+        List<Fixed> rotationTheta = readList(stream, rotationKeyFrames, offsets.get(9).getValue(), BattleMeshRead::readCompressedSglFixed);
+
+        List<Fixed> scaleX = readList(stream, scaleKeyFrames, offsets.get(10).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> scaleY = readList(stream, scaleKeyFrames, offsets.get(11).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> scaleZ = readList(stream, scaleKeyFrames, offsets.get(12).getValue(), BattleMeshRead::readSglFixed);
+
+        entry.addProperty("translation", zip(translationTimes, zipPoints(translationX, translationY, translationZ)));
+        entry.addProperty("rotation", zip(rotationTimes, zipRotations(rotationX, rotationY, rotationZ, rotationTheta)));
+        entry.addProperty("scale", zip(scaleTimes, zipPoints(scaleX, scaleY, scaleZ)));
+
+        stream.seek(tempOffset);
+        return entry;
     }
 
     public static <E> Map<Integer, E> zip(List<Integer> times, List<E> values) {
@@ -463,15 +462,7 @@ public class BattleMeshRead {
         return points;
     }
 
-    public static Angle readAngle(ImageInputStream stream) {
-        try {
-            return new Angle(stream.readShort());
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    public static Fixed readHalfSglFixed(ImageInputStream stream) {
+    public static Fixed readCompressedSglFixed(ImageInputStream stream) {
         try {
             // read 16 bits signed
             short s = stream.readShort();
@@ -519,41 +510,17 @@ public class BattleMeshRead {
 
         // always 8
         chunk.addProperty("header_size", new HexValue(stream.readInt()));
-        // some offsets,counts. always < chunk_length
-        chunk.addProperty("skeletonOffset", new HexValue(stream.readInt()));
-        chunk.addProperty("meshOffset", new HexValue(stream.readInt()));
-        // weapon mesh?
-        chunk.addProperty("weaponMeshOffset", new HexValue(stream.readInt()));
-
-        int numMeshes = (chunk.getInt("weaponMeshOffset") - chunk.getInt("meshOffset")) / PolygonDataExtended.SIZE;
-        chunk.addProperty("numMeshes", numMeshes);
+        HexValue skeletonOffset = new HexValue(stream.readInt());
+        HexValue meshOffset = new HexValue(stream.readInt());
+        HexValue weaponMeshOffset = new HexValue(stream.readInt());
+        chunk.addProperty("skeletonOffset", skeletonOffset);
+        chunk.addProperty("meshOffset", meshOffset);
+        chunk.addProperty("weaponMeshOffset", weaponMeshOffset);
 
         chunk.addProperty("header_padding", new HexValue(stream.readInt()));
         chunk.addProperty("offset_after_header", new HexValue((int) stream.getStreamPosition()));
 
-        byte[] data = new byte[chunk.getInt("meshOffset")-(chunk.getInt("offset_after_header")-chunk.getStart())];
-        stream.read(data);
-
-        // read meshes
-        stream.seek(chunk.getStart() + chunk.getInt("meshOffset"));
-        Block bodyMeshes = chunk.createBlock("body_meshes", (int) stream.getStreamPosition(), 0);
-        for (int i = 0; i < numMeshes; i++) {
-            PolygonDataExtended polygonData = new PolygonDataExtended(stream, "mesh[" + i + "]");
-            polygonData.readDetails(data, chunk.getInt("offset_after_header") - chunk.getStart());
-            bodyMeshes.addBlock(polygonData);
-        }
-
-        // read a single mesh definition (padded with 4 bytes)
-
-        int weaponMeshOffset = chunk.getInt("weaponMeshOffset");
-        if (weaponMeshOffset > 0 ) {
-            stream.seek(chunk.getStart() + weaponMeshOffset);
-            PolygonDataExtended weaponMesh = new PolygonDataExtended(stream, "weaponMesh");
-            weaponMesh.readDetails(data, chunk.getInt("offset_after_header") - chunk.getStart());
-            chunk.addBlock(weaponMesh);
-        }
-        chunk.addProperty("offset_pdata", new HexValue((int) stream.getStreamPosition()));
-
+        // read skeleton
         stream.seek(chunk.getStart() + chunk.getInt("skeletonOffset"));
         int length = chunk.getLength() - chunk.getInt("skeletonOffset");
         List<HexValue> skeletonRawStream = new ArrayList<>();
@@ -562,7 +529,32 @@ public class BattleMeshRead {
             skeletonRawStream.add(new HexValue(value));
         }
         chunk.addProperty("skeleton_raw_stream", skeletonRawStream);
-        chunk.addProperty("skeleton", readSkeleton(stream, chunk, length));
+        Bone skeleton = readSkeleton(stream, chunk, length);
+        chunk.addProperty("skeleton", skeleton);
+
+        int numMeshes = skeleton.getNumMeshes();
+        chunk.addProperty("numMeshes", numMeshes);
+
+        stream.seek(chunk.getStart() + chunk.getInt("meshOffset"));
+        Block bodyMeshes = chunk.createBlock("body_meshes", (int) stream.getStreamPosition(), 0);
+        for (int i = 0; i < numMeshes; i++) {
+            PolygonDataExtended polygonData = new PolygonDataExtended(stream, "mesh[" + i + "]");
+            bodyMeshes.addBlock(polygonData);
+        }
+        // read mesh details (points, vertex indices, polygon attributes)
+        for (Object object : bodyMeshes.getProperties().values()) {
+            PolygonDataExtended polygonData = (PolygonDataExtended) object;
+            polygonData.readDetails2(stream, chunk.getStart());
+        }
+
+        // read weapon mesh
+        if (weaponMeshOffset.getValue() > 0 ) {
+            stream.seek(chunk.getStart() + weaponMeshOffset.getValue());
+            PolygonDataExtended weaponMesh = new PolygonDataExtended(stream, "weaponMesh");
+            weaponMesh.readDetails2(stream, chunk.getStart());
+            chunk.addBlock(weaponMesh);
+        }
+        chunk.addProperty("offset_pdata", new HexValue((int) stream.getStreamPosition()));
 
         return chunk;
     }
@@ -578,39 +570,43 @@ public class BattleMeshRead {
         int boneIndex = 0;
         int meshIndex = 0;
         Bone rootBone = new Bone(-1);
-        Stack<Bone> bonestack = new Stack<>();
-        bonestack.push(rootBone);
+        Deque<Bone> boneStack = new ArrayDeque<>();
+        boneStack.push(rootBone);
         while (skeletonStream.getStreamPosition() < length) {
             int command = skeletonStream.read();
             switch (command) {
                 case 0xfd: {
                     // push matrix, read next animation slot
                     Bone bone = new Bone(boneIndex++);
-                    bonestack.peek().addBone(bone);
-                    bonestack.push(bone);
+                    boneStack.peek().addBone(bone);
+                    boneStack.push(bone);
                     break;
                 }
                 case 0xfe:
                     // pop matrix
-                    bonestack.pop();
-                    if (bonestack.isEmpty()) {
+                    boneStack.pop();
+                    if (boneStack.isEmpty()) {
                         return rootBone;
                     }
                     break;
                 case 0:
+                case 0x80:
                     // add mesh
-                    bonestack.peek().addMesh(meshIndex++);
+                    boneStack.peek().addMesh(meshIndex++);
                     break;
-                case 9:
+                case 0x1:
+                case 0x9:
                 case 0x10:
                 case 0x11:
-                case 0x20: {
+                case 0x20:
+                case 0x21:
+                case 0x22: {
                     // known tags to read translation
                     // first seek to int32 boundary
                     skeletonStream.seek(((skeletonStream.getStreamPosition() + 3) / 4) * 4);
                     Tag tag = new Tag(command);
                     tag.translation = new Point(skeletonStream);
-                    bonestack.peek().addTag(tag);
+                    boneStack.peek().addTag(tag);
                     break;
                 }
                 case 0x30: {
@@ -621,11 +617,12 @@ public class BattleMeshRead {
                     tag.translation = new Point(skeletonStream);
                     tag.rotation = new Quarternion(readSglFixed(skeletonStream), readSglFixed(skeletonStream), readSglFixed(skeletonStream), readSglFixed(skeletonStream));
                     tag.scale = new Point(skeletonStream);
-                    bonestack.peek().addTag(tag);
+                    boneStack.peek().addTag(tag);
                     break;
                 }
                 default:
-                    throw new IllegalStateException("Unknown skeleton command 0x"+Integer.toHexString(command));
+                    new IllegalStateException("Unknown skeleton command 0x"+Integer.toHexString(command)).printStackTrace();
+                    return rootBone;
             }
         }
         return rootBone;
@@ -651,6 +648,13 @@ public class BattleMeshRead {
 
         public void addTag(Tag tag) {
             tags.add(tag);
+        }
+
+        public int getNumMeshes() {
+            return childs.stream()
+                    .map(Bone::getNumMeshes)
+                    .mapToInt(Integer::intValue)
+                    .sum() + meshes.size();
         }
 
         @Override

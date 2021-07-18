@@ -1,187 +1,213 @@
 # Description
 
-Battle mesh animations always have the extension ".bin", and the files start with "x8an".
-For each character there is one animation file.
-The animation is keyframe based.
+Battle mesh animations have the extension ".bin", and the files start with "x8an".
+For each character there is one animation file. The animation is keyframe based.
+TODO: Check animation for non player models.
 
-The first structure in an animation file is a "segment" (named b/c of lack of a better name).
-The segment contains a few animation slots (naming again temporary), which looks like they belong to a single bone each.
-
-One animation slot contains three channels: translation (vector3), a rotation (looks like a quaternion) and a strange 
-vector3 channel which might be scale. 
-
-For each channel there is a list of keyframe times and an equal amount of translation/rotation/scale.
-
-Translation channel is the first channel. Translation is simply stored as  an SGL POINT.
-
-Rotation is stored as 4 int16 values, which look like the fractional part of an SGL FLOAT. As a quarternion is 4 floats
-and the values are unit vectors (so each value is in the range [-1 .. 1]), it does make sense to not waste space for the
-fixed part. TODO: how is the sign encoded? Should the 15th bit sign extended? 
-Note: this may also be a rotation axis (x,y,z normalized) and an angle. 
-   @see void slRotAX(FIXED vctX, FIXED vctY, FIXED vctZ, ANGLE A)
-   Rotates relative to the desired axis about the origin point. The axis is 
-   specified by a unit vector.
-
-Possible arguments for a quarternion:
-* see https://stackoverflow.com/questions/8919086/why-are-quaternions-used-for-rotations
-* speed: need fewer multiplications than matrix multiplication
-* interpolation: quarternions can easily be interpolated
-
-Scale channel seems to be always only one key frame, so the scale does not change over time. The value is (u)int32 and
-always 0x0000 0x0001. This is 1 in uint32, but it would be nearly zero in SGL FIXED. A 1.0 in SGL FIXED is 
-0x0001 0x0000. I guess this means the scale channel is unused. 
-
-All animation slots within a segment have the same start and end times, but the exact keyframe times in between do not 
-need to match (TODO: check this)
-
-## Segments and logical groups
-
-The segments are logically loosely grouped into blocks, in which the start and end times are consecutive. In the next
-logical block the start time of the first segment restarts again. Please note that the start time does not need to be 0
-and indeed most often it is not. All segments in the same logical block have the same amount of animation slots (bones).
-One estimation is that the logical block corresponds to a mesh animation and the animation is split up into segments to
-save precious working memory.
-
-Example x8an00.bin (Synbios): 
-
-    | Segment   | Times (start, end) | animation slots (bones) | remark
-    +-----------+--------------------+-------------------------+-----------
-    | Segment 0 | 35 - 85            |   22 slots              | start of animation 1
-    | Segment 1 | 133 - 150          |   22 slots              | animation 1, part 2
-    | Segment 2 | 133 - 150          |   22 slots              | animation 1, part 2 (alternative)
-    | Segment 3 | 275 - 380          |   22 slots              | animation 1, part 4 (note: part 3 is the last segment in the block)
-    | Segment 4 | 380 - 505          |   22 slots              | animation 1, part 5
-    | Segment 5 | 150 - 275          |   22 slots              | animation 1, part 3 (out of order)
-    | Segment 6 | 35 - 85            |   22 slots              | next animation
-    | Segment 7 | 133 - 150          |   22 slots              | 
-    | Segment 8 | 133 - 150          |   22 slots              | 
-    | Segment 9 | 275 - 345          |   22 slots              | 
-    | Segment 10 | 345 - 437         |   22 slots              | 
-    | Segment 11 | 437 - 609         |   22 slots              | 
-    | Segment 12 | 35 - 85           |   22 slots              | next animation
-
-Some notes to this animation:
-* animation times 133 to 150 is saved two times. Either this is an alternative animation part or it is an error
-* the parts of the animations are not consecutive. Part 3 of the animation with times 150 - 275 is at the end of the
-  segment
-* total number of segment blocks (mesh animations): 8
-* the number of animation slots (bones) is between 20 and 23. 
-  Maybe relevant: the model has 19 meshes and one weapon mesh, in total 20.
-
-Please note that there is momentarily no possibility to go directly to a specific segment.
-After you have read all animation slots (channel size is -1) you simply skip all zero uints until one is not zero 
-anymore (this is the data size of the next segment) or there are no more bytes (EOF). 
-
-
-## Animation slot table
-
-This table has one entry for each animation slot. First the number of entries for each channel are stored and then for
-each channel component (details later) an offset into the segments data array. Please note that the offset is 
-calculated from the start of the segment, which beginns with 4 bytes (uint32) offset to the animation slot table.
-So the first offset into the data array is 0x04.
-
-Example x8an00.bin (Synbios), segment 49 (last segment), slot 1 (counted from 0, so this is the 2nd slot):
-
-    0x05, 0x07, 0x01, 0x80', 0x8a, 0x98, 0x9c, 0xb0, 0xc4, 0xd8, 0xe6, 0xf4, 0x102, 0x110, 0x114, 0x118
-    Breakdown:
-    0x05, 0x07, 0x01 - 5 translation key frames, 7 rotation key frames, 1 scale key frame
-    0x80,  - offset to 5 uint16 translation key frame times (10 bytes) 
-    0x8a,  - offset to 7 uint16 rotation key frame times (14 bytes)
-    0x98,  - offset to 5 uint16 scale key frame times (2 bytes)
-    0x9c,  - offset to 5 SGL FIXED translation x
-    0xb0,  - offset to 5 SGL FIXED translation y
-    0xc4,  - offset to 5 SGL FIXED translation z
-    0xd8,  - offset to 7 int16 (abbreviated SGL FIXED?) rotation quarternion real part 
-    0xe6,  - offset to 7 int16 (abbreviated SGL FIXED?) rotation quarternion i
-    0xf4,  - offset to 7 int16 (abbreviated SGL FIXED?) rotation quarternion j
-    0x102, - offset to 7 int16 (abbreviated SGL FIXED?) rotation quarternion k
-    0x110, - offset to 1 int32 (strange SGL FIXED) scale x
-    0x114, - offset to 1 int32 (strange SGL FIXED) scale y
-    0x118  - offset to 1 int32 (strange SGL FIXED) scale z
-
-## Animation data
-
-Example x8an00.bin (Synbios), segment 49 (last segment), slot 1 (counted from 0, so this is the 2nd slot).
-The animation data is sorted by channel for readability.
-
-    times translation (0): 0x140,  0x14b,  0x14f,  0x159,  0x162
-    translation.x (3):     2.864,  2.864,  2.864,  2.864,  2.863
-    translation.y (4):    -0.896, -0.896, -1.322, -1.322, -0.934
-    translation.z (5):     4.359,  4.359,  5.601,  5.601,  4.486
-
-    times rotation (1): 0x140,  0x14b,  0x14d,  0x14f,  0x159,  0x15d,  0x162
-    rotation.x (6):     0.041,  0.041,  0.046,  0.051,  0.051,  0.047,  0.042
-    rotation.i (7):     0.071,  0.071,  0.071,  0.071,  0.071,  0.071,  0.071
-    rotation.j (8):    -0.012, -0.012, -0.011, -0.009, -0.009, -0.010, -0.012
-    rotation.k (9):     0.236,  0.236,  0.235,  0.234,  0.234,  0.235,  0.236
-
-    times scale (2): 0x140
-    scale.x (10):      0x1
-    scale.y (11):      0x1
-    scale.z (12):      0x1
-
+The file has a technical and a logical structure. 
 
 # File Structure
 
-    +-------------------------+
-    | Segment 1               |
-    | +---------------------+ |
-    | | Data Section        | |
-    | |                     | |
-    | +---------------------+ |
-    | +---------------------+ |
-    | | Animation Slot Table| |
-    | |                     | |
-    | +---------------------+ |
-    | padding                 |
-    +-------------------------+
-    | Segment 2               |
-    | ...                     |
-    +-------------------------+
-    | Segment n               |
-    +-------------------------+
+    +------------------------------+
+    | Animation 0                  |
+    | +--------------------------+ |
+    | | Bone 0:                  | |
+    | |  * Key Frames            | |
+    | |  * translation,          | |
+    | |  * rotation,             | |
+    | |  * scale                 | |
+    | +--------------------------+ |
+    | | Bone 1:                  | |
+    | |  * Key Frames            | |
+    | |  * ...                   | |
+    | +--------------------------+ |
+    | | Bone n:                  | |
+    | +--------------------------+ |
+    | |  * Key Frames            | |
+    | |  * ...                   | |
+    | +--------------------------+ |
+    | | Bone 0 offsets:          | |
+    | | * offsets to key frames  | |
+    | | * offsets to translation | |
+    | | * offsets rotation       | |
+    | | * scale                  | |
+    | +--------------------------+ |
+    | | ...                      | |
+    | +--------------------------+ |
+    | | Bone n offsets:          | |
+    | +--------------------------+ |
+    | | End of Animation marker  | |
+    | +--------------------------+ |
+    | padding                      |
+    +------------------------------+
+    | Animation 1                  |
+    | ...                          |
+    +------------------------------+
+    | Animation n                  |
+    +------------------------------+
+    | End Of File Marker           |
+    +------------------------------+
 
-# Segment
+The file does not have a header. It contains a list of animations which are separated by paddings. The start of each
+animation can only be found by reading all previous animations and skipping the null (0x00) padding bytes.
+TODO: check if there are offsets to the animations in model files.
 
 | Offset | Name          | Type       | Count | Description
 |--------|---------------|------------|-------|-----------------------------
-| 0x00   | data          | bytes      |   ?   | animation and keyframe data
-| ???    | animation_slot_table | AnimationSlotTable |   1   | animation descriptions
+| 0x00   | animation[0]  | Animation  |   1   | first animation
+| ?      | padding[0]    | bytes      |   ?   | padding to next animation
+| ?      | animation[1]  | Animation  |   1   | second animation
+| ?      | padding[1]    | bytes      |   ?   | padding to next animation
+| ...    | ...           | ...        |  ...  | ...
+| ?      | animation[n]  | Animation  |   1   | last animation
+| ?      | EOF_marker    | int32      |   1   | always -1
 
-# Data Section
+# Animation
 
-| Offset | Name                | Type       | Count | Description
-|--------|---------------------|------------|-------|-----------------------------
-| 0x00   | slot_table_offset   | uint32     |   1   | start of animation slots table
-| ???    | data                |            | dictionary_offset - 4 | data for animations
+One animation contains key frames with the channels translation, rotation and scale for each bone of the corresponding
+model. The channels for translation, rotation and scale can each have a different set of key frames.
 
+Each component, i.e. translation x, translation y and translation z is saved in a separate list, to actually use
+these you have to combine the channels.
 
-# AnimationSlotTable
+| Offset | Name                  | Type   | Count                | Description
+|--------|-----------------------|--------|----------------------|-----------------------------
+| 0x00   | offset_to_offset_table| int32  |       1              | offset to table of offsets. see #bone[0]_offsets
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[0]_keyframes    |        |                      | key frames for bone 0 
+| 0x00   | keyframes_translation | uint16 | num_translation_keys | list of key frames for translation channel
+| ???    | keyframes_rotation    | uint16 | num_rotation_keys    | list of key frames for rotation channel
+| ???    | keyframes_scale       | uint16 | num_scale_keys       | list of key frames for scale channel
+| ???    | translation_x         | FIXED  | num_translation_keys | list of translation x component
+| ???    | translation_y         | FIXED  | num_translation_keys | list of translation y component
+| ???    | translation_z         | FIXED  | num_translation_keys | list of translation z component
+| ???    | rotation_x            | CFIXED | num_rotation_keys    | list of rotation quaternion x component
+| ???    | rotation_y            | CFIXED | num_rotation_keys    | list of rotation quaternion y component
+| ???    | rotation_z            | CFIXED | num_rotation_keys    | list of rotation quaternion z component
+| ???    | rotation_angle        | CFIXED | num_rotation_keys    | list of rotation quaternion w component
+| ???    | scale_x               | FIXED  | num_scale_keys       | list of scale x component
+| ???    | scale_y               | FIXED  | num_scale_keys       | list of scale y component
+| ???    | scale_z               | FIXED  | num_scale_keys       | list of scale z component
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[1]_keyframes    |        |                      | key frames for bone 1
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        |                       |        |                      | key frames for bone ...
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[n]_keyframes    |        |                      | key frames for bone n
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[0]_offsets      |        |                      | offset table for bone 0
+| 0x00   | num_translation_keys  | uint32 |   1                  | number of key frames in translation channel. If this is 0xffffffff then this is the end marker
+| 0x04   | num_rotation_keys     | uint32 |   1                  | number of key frames in rotation channel
+| 0x08   | num_scale_keys        | uint32 |   1                  | number of key frames in scale channel
+| 0x0c   | translation_times     | uint32 |   1                  | offset to translation frame numbers
+| 0x10   | rotation_times        | uint32 |   1                  | offset to rotation frame numbers
+| 0x14   | scale_times           | uint32 |   1                  | offset to scale frame numbers
+| 0x18   | translation_x         | uint32 |   1                  | offset to translation x component
+| 0x1c   | translation_y         | uint32 |   1                  | offset to translation y component
+| 0x20   | translation_z         | uint32 |   1                  | offset to translation z component
+| 0x24   | rotation_x            | uint32 |   1                  | offset to rotation axis x
+| 0x28   | rotation_y            | uint32 |   1                  | offset to rotation axis y
+| 0x2c   | rotation_z            | uint32 |   1                  | offset to rotation axis z
+| 0x30   | rotation_angle        | uint32 |   1                  | offset to rotation angle
+| 0x34   | scale_x               | uint32 |   1                  | offset to scale x component
+| 0x38   | scale_y               | uint32 |   1                  | offset to scale y component
+| 0x3c   | scale_z               | uint32 |   1                  | offset to scale z component
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[1]_offsets      |        |                      | offset table for bone 1
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | #bone[n]_offsets      |        |                      | offset table for bone n
+|--------|-----------------------|--------|----------------------|-----------------------------
+|        | end_marker            | int32  |                      | end of animation marker. always -1
 
-| Offset | Name                | Type               | Count | Description
-|--------|---------------------|--------------------|-------|-----------------------------
-| 0x00   | slot_table_entry    | AnimationSlotEntry |   n   | variable number of slot entries
-| ???    | end (0xffffffff)    | int32              |   1   | channel size of -1 denotes end of table
+Note: all offsets are relative to the start of the animation.
 
-# AnimationSlotEntry (size: 0x40 bytes)
+# SGL Types
 
-| Offset | Name                | Type   | Count | Description
-|--------|---------------------|--------|-------|-----------------------------
-| 0x00   | translation_keys    | uint32 |   1   | number of key frames in translation channel
-| 0x04   | rotation_keys       | uint32 |   1   | number of key frames in rotation channel
-| 0x08   | scale_keys          | uint32 |   1   | number of key frames in scale channel
-| 0x0c   | translation_times   | uint32 |   1   | offset to translation channel times
-| 0x10   | rotation_times      | uint32 |   1   | offset to rotation channel times
-| 0x14   | scale_times         | uint32 |   1   | offset to scale channel times
-| 0x18   | translation_x       | uint32 |   1   | offset to translation x component
-| 0x1c   | translation_y       | uint32 |   1   | offset to translation y component
-| 0x20   | translation_z       | uint32 |   1   | offset to translation z component
-| 0x24   | rotation_real       | uint32 |   1   | offset to rotation quaternion real component
-| 0x28   | rotation_i          | uint32 |   1   | offset to rotation quaternion i component
-| 0x2c   | rotation_j          | uint32 |   1   | offset to rotation quaternion j component
-| 0x30   | rotation_k          | uint32 |   1   | offset to rotation quaternion k component
-| 0x34   | scale_x             | uint32 |   1   | offset to scale x component
-| 0x38   | scale_y             | uint32 |   1   | offset to scale y component
-| 0x3c   | scale_z             | uint32 |   1   | offset to scale z component
+* FIXED is a SGL FIXED Data Type
+* CFIXED is a SGL compressed FIXED Data type. Read signed 16bit value from stream, sign extend it to 32 bits, 
+  shift left by 2. Interpret the resulting int32 as an SGL FIXED. This is used for values -1 <= x <= 1, so there is no
+  need for a "big" integer part.
+* combining the translation components (3 x FIXED) results in a SGL VECTOR
+* combining the rotation components (4 x compressed FIXED) results in a rotation quaternion. These may or may not be
+  usable for `void slRoaAX(vctx , vcty , vctz , anga)`, nevertheless they can be used in matrix multiplication.
+* combining the scale components (3 x FIXED) results in a scale VECTOR
 
-Note: all offsets are relative to the start of the segment
+# Models and Animations
+
+Each animation file (with the list of animations) corresponds to a group of meshes. For characters the meshes belong to the same character, unpromoted
+and promoted.
+
+The animations in this file is loosely grouped by keyframe: The frames of consecutive animations are ascending and 
+belong to the same mesh. Once the frame numbers restart at a low value, the animations belong to a new
+mesh. Each animation in the same group has the same number of animated bones and these are the same as the number of
+bones in the mesh.
+
+Note that in the mesh files there are typically already 3 or 4 animations embedded: idle, attack, hit, block.
+The animations files typically only have attack animations.
+
+Examples are for Synbios: 
+* x8an00.bin - animations file
+* x8pc00a.bin - x8pc00d.bin - unpromoted mesh
+* x8pc00e.bin - x8pc00h.bin - promoted mesh
+
+## Grouping Animations
+
+| Animation   | Times (start, end) | animation slots (bones) | remark
+|-------------|--------------------|-------------------------|-----------
+| Animation 0 | 35 - 85            |   22 slots              | start of animation group 0
+| Animation 1 | 133 - 150          |   22 slots              | animation 1, part 2
+| Animation 2 | 133 - 150          |   22 slots              | animation 1, part 2 (alternative)
+| Animation 3 | 275 - 380          |   22 slots              | animation 1, part 4 (note: part 3 is the last animation in the group)
+| Animation 4 | 380 - 505          |   22 slots              | animation 1, part 5
+| Animation 5 | 150 - 275          |   22 slots              | animation 1, part 3 (out of order)
+|-------------|--------------------|-------------------------|-----------
+| Animation 6 | 35 - 85            |   22 slots              | start of animation group 1
+| Animation 7 | 133 - 150          |   22 slots              | ..
+| Animation 8 | 133 - 150          |   22 slots              | 
+| Animation 9 | 275 - 345          |   22 slots              | 
+| Animation 10 | 345 - 437         |   22 slots              | 
+| Animation 11 | 437 - 609         |   22 slots              |
+|-------------|--------------------|-------------------------|-----------
+| Animation 12 | 35 - 85           |   22 slots              | start of animation group 2
+| ...          |                   |                         |
+
+Notes:
+* Animation 1 and 2 as well as 7 and 8 are present twice in this file. This happens a lot in other animations with different Animation  
+* the parts of the animations are not consecutive. Part 3 of the animation with times 150 - 275 is at the end of the
+  segment
+
+## Groups
+
+This is the whole file, with the animations already grouped.
+
+| Nr | Animation Group |  Frames  | Animation Bones | Model | Mesh Bones | Notes
+|----|-----------------|----------|-----------------|-------|------------|------
+|  0 | 0 - 5    (6)    | 35 - 505 |   22            | 00a   |  22        |
+|  1 | 6 - 11   (6)    | 35 - 609 |   22            | 00b   |  22        |
+|  2 | 12 - 17  (6)    | 35 - 715 |   22            | 00c   |  22        |
+|  3 | 18 - 24  (7)    | 35 - 413 |   23            | 00d   |  23        | additional 0x60 entry in animation table, second 0x30 tag
+|  4 | 25 - 30  (6)    | 35 - 505 |   20            | 00e   |  20        |
+|  5 | 31 - 36  (6)    | 35 - 609 |   20            | 00f   |  20        |
+|  6 | 37 - 42  (6)    | 35 - 715 |   20            | 00g   |  20        |
+|  7 | 43 - 49  (7)    | 35 - 413 |   21            | 00h   |  21        | additional 0x60 entry in animation table, second 0x30 tag
+
+Notes:
+* "Model" denotes the mesh file for which the animation group is for.
+* Promoted Synbios mesh has 2 bones less than unpromoted
+* Meshes with Dagger (00d unpromoted, 00h promoted) have an additional bone,
+  an additional entry with type 0x60 in the animation table and a second weapon tag (tag type 0x30)
+  see [1] for details.
+* at least for now there is no technical link between animation group in this file and the mesh (like an offset or so).
+
+# Open Points
+
+1. Check animation for non player models. Update this description if neccessary.
+1. Find a better method to skip the padding at the end of the animation.
+1. Find a better (technical) method to separate the animations into (mesh) groups.
+1. Find a better (technical) method to link the model with the animation group.
+
+# References
+
+[1] format-battlemesh.md
+[2] ST-238-R1-051795 - SGL Functions Reference.pdf
+
