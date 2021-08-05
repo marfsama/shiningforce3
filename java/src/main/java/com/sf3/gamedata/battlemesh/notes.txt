@@ -239,3 +239,49 @@ Dantares:
 |  4 | 25 - 31   (7) | 100 - 1140 |   32  | 01f   |       |
 |  5 | 32 - 37   (6) | 100 - 1193 |   29  | 01g   |       |
 
+
+
+x8pc700.bin skeleton:
+-> 12  meshes
+-> 12 bones (embedded), no real representation in
+
+0xfd - bone 0
+0x00 - mesh 0
+  0xfd - bone 1
+  0x00 - mesh 1
+0xfe
+  0xfd - bone 2
+  0x00 - mesh 2
+0xfe
+  0xfd - bone 3
+  0x00 - mesh 3
+0xfe
+  0xfd - bone 4
+  0x00 - mesh 4
+    0xfd - bone 5
+      0xfd - bone 6
+      0x00 mesh 5
+    0xfe
+    0x00 - mesh 6
+  0xfe
+0xfe
+  0xfd - bone 7
+  0x00 - mesh 7
+    0xfd - bone 8
+      0xfd - bone 9
+      0x00 - mesh 8
+    0xfe
+    0x00 - mesh 9
+  0xfe
+0xfe
+  0xfd - bone 10
+  0x00 - mesh 10
+    0xfd - bone 11
+    0x00 - mesh 11
+  0xfe
+0xfe
+0xfe (somethings wrong here. cannot pop stack)
+0xfe
+0x00
+0x00
+0x00

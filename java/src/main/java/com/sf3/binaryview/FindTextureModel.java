@@ -6,6 +6,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.nio.ByteOrder;
 import java.nio.file.Path;
+import java.util.List;
 
 /** Model class. */
 public class FindTextureModel extends Model {
@@ -18,12 +19,13 @@ public class FindTextureModel extends Model {
     public static final String BYTE_ORDER = "byteOrder";
     public static final String FILE_SIZE = "fileSize";
     public static final String FILE_OFFSET = "fileOffset";
+    public static final String HIGHLIGHT_GROUPS = "highlightGroups";
 
 
     /** Currently read file. */
     private Path path;
     /** Scale Factor. */
-    private int scale = 4;
+    private int scale = 10;
     /** the image. */
     private BufferedImage image;
     /** Size of the image Panel. */
@@ -38,6 +40,8 @@ public class FindTextureModel extends Model {
     private int fileSize;
     /** Offset in file where to start the image. */
     private int fileOffset;
+    /** List of highlights. */
+    private List<HighlightGroup> highlightGroups;
 
 
     public Path getPath() {
@@ -131,5 +135,15 @@ public class FindTextureModel extends Model {
         int old = this.fileOffset;
         this.fileOffset = fileOffset;
         firePropertyChange(FILE_OFFSET, old, fileOffset);
+    }
+
+    public List<HighlightGroup> getHighlightGroups() {
+        return highlightGroups;
+    }
+
+    public void setHighlightGroups(List<HighlightGroup> highlightGroups) {
+        List<HighlightGroup> old = this.highlightGroups;
+        this.highlightGroups = highlightGroups;
+        firePropertyChange(HIGHLIGHT_GROUPS, old, fileOffset);
     }
 }

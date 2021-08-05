@@ -4,17 +4,13 @@ import com.sf3.gamedata.sgl.*;
 import com.sf3.gamedata.sgl.Polygon;
 import com.sf3.simple3d.*;
 
-
 import javax.imageio.ImageIO;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.*;
+import java.io.*;
 import java.util.List;
-import java.util.function.Function;
+import java.util.*;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
@@ -24,12 +20,21 @@ public class Sf3Util {
     private Sf3Util() {
     }
 
-    /** converts 16 bit rgb (saturn rgb color) to 8 bits each channel. */
+    /** converts 16 bit rgb (saturn bgr555) to 8 bits each channel (rgb888). */
     public static int rgb16ToRgb24(int value) {
         int r = (value & 0x1f) << 3;
         int g = ((value >> 5) & 0x1f) << 3;
         int b = ((value >> 10) & 0x1f) << 3;
         return (r << 16) + (g << 8) + b;
+    }
+
+    /** converts 24 bit rgb (rgb888) to saturn 16bit (bgr555). */
+    public static int rgb24ToRgb16(int value) {
+        int r = ((value >> 16) & 0xff) >> 3;
+        int g = ((value >> 8) & 0xff) >> 3;
+        int b = ((value) & 0xff) >> 3;
+        // note: msb (bit 15) always is 1
+        return (b << 10) + (g << 5) + r + (1 << 15);
     }
 
     /** Reads a plain 16bit Texture image into a {@link BufferedImage}. */
@@ -64,7 +69,7 @@ public class Sf3Util {
     }
 
     public static List<TextureUv> writeTextureImage(List<BufferedImage> textures, Set<Integer> solidColors, String textureFileName, int textureIndexStart, boolean annotate) {
-        if (textures.size() == 0 && solidColors.size() == 0) {
+        if (textures.isEmpty() && solidColors.isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -93,7 +98,7 @@ public class Sf3Util {
         int colorsFittingInColumn = maxHeight / solidColorsSize;
         int additionalColumns = (remainingColors + colorsFittingInColumn - 1) / colorsFittingInColumn;
         // if we don't have a texture column and still need some space for solid colors
-        if (currentHeight == 0 && solidColors.size() > 0) {
+        if (currentHeight == 0 && solidColors.isEmpty()) {
             // allocate an additional column
             additionalColumns++;
         }
@@ -117,7 +122,7 @@ public class Sf3Util {
                 if (annotate) {
                     graphics.drawRect(x, y, texture.getWidth(), texture.getHeight());
                     if (textureIndexStart >= 0) {
-                        graphics.drawString(String.valueOf(textureIndexStart + textureIndex), x, y + fontHeight);
+                        graphics.drawString(String.format("%02X", textureIndexStart + textureIndex), x, y + fontHeight);
                     }
                 }
                 y += texture.getHeight();
@@ -164,10 +169,10 @@ public class Sf3Util {
 
     public static final List<Vector2> texture_vertices = Arrays.asList(v0, v1, v2, v3);
 
-    public static final List<Integer> textureCoordinatesNoFlip = Arrays.asList(0, 2, 3, 1);
-    public static final List<Integer> textureCoordinatesMirrorX = Arrays.asList(2, 0, 1, 3);
-    public static final List<Integer> textureCoordinatesMirrorY = Arrays.asList(1, 3, 2, 0);
-    public static final List<Integer> textureCoordinatesMirrorXY = Arrays.asList(3, 1, 0, 2);
+    protected static final List<Integer> textureCoordinatesNoFlip = Arrays.asList(0, 2, 3, 1);
+    protected static final List<Integer> textureCoordinatesMirrorX = Arrays.asList(2, 0, 1, 3);
+    protected static final List<Integer> textureCoordinatesMirrorY = Arrays.asList(1, 3, 2, 0);
+    protected static final List<Integer> textureCoordinatesMirrorXY = Arrays.asList(3, 1, 0, 2);
 
     private static final List<List<Integer>> textureCoordinates = Arrays.asList(
             textureCoordinatesNoFlip,   // 00
@@ -221,7 +226,7 @@ public class Sf3Util {
     }
 
     /** Reads an unsigned int from the stream, rethrowing a possible {@link IOException} as an unchecked exception. */
-    public static Integer readUnsignedInt(ImageInputStream stream) {
+    public static Integer readInt(ImageInputStream stream) {
         try {
             return stream.readInt();
         } catch (IOException e) {
@@ -236,5 +241,36 @@ public class Sf3Util {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Reads a short from the stream, rethrowing a possible {@link IOException} as an unchecked exception. */
+    public static Short readShort(ImageInputStream stream) {
+        try {
+            return stream.readShort();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static Fixed readCompressedSglFixed(ImageInputStream stream) {
+        // read 16 bits signed
+        short s = readShort(stream);
+        // sign extend to 32 bits
+        int i = (int) s;
+        // scale to correct value
+        int scaled = i << 2;
+        return new Fixed(scaled);
+    }
+
+    public static Fixed readSglFixed(ImageInputStream stream) {
+        return new Fixed(readInt(stream));
+    }
+
+    public static List<String> getExceptionLines(Exception e) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        BufferedReader br = new BufferedReader(new StringReader(sw.toString()));
+        return br.lines().collect(Collectors.toList());
     }
 }

@@ -412,22 +412,22 @@ public class BattleMeshRead {
         }
         entry.addProperty("offsets", offsets);
         long tempOffset = stream.getStreamPosition();
-        List<Integer> translationTimes = readList(stream, translationKeyFrames, offsets.get(0).getValue(), BattleMeshRead::readShort);
-        List<Integer> rotationTimes = readList(stream, rotationKeyFrames, offsets.get(1).getValue(), BattleMeshRead::readShort);
-        List<Integer> scaleTimes = readList(stream, scaleKeyFrames, offsets.get(2).getValue(), BattleMeshRead::readShort);
+        List<Integer> translationTimes = readList(stream, translationKeyFrames, offsets.get(0).getValue(), Sf3Util::readUnsignedShort);
+        List<Integer> rotationTimes = readList(stream, rotationKeyFrames, offsets.get(1).getValue(), Sf3Util::readUnsignedShort);
+        List<Integer> scaleTimes = readList(stream, scaleKeyFrames, offsets.get(2).getValue(), Sf3Util::readUnsignedShort);
 
-        List<Fixed> translationX = readList(stream, translationKeyFrames, offsets.get(3).getValue(), BattleMeshRead::readSglFixed);
-        List<Fixed> translationY = readList(stream, translationKeyFrames, offsets.get(4).getValue(), BattleMeshRead::readSglFixed);
-        List<Fixed> translationZ = readList(stream, translationKeyFrames, offsets.get(5).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> translationX = readList(stream, translationKeyFrames, offsets.get(3).getValue(), Sf3Util::readSglFixed);
+        List<Fixed> translationY = readList(stream, translationKeyFrames, offsets.get(4).getValue(), Sf3Util::readSglFixed);
+        List<Fixed> translationZ = readList(stream, translationKeyFrames, offsets.get(5).getValue(), Sf3Util::readSglFixed);
 
-        List<Fixed> rotationX = readList(stream, rotationKeyFrames, offsets.get(6).getValue(), BattleMeshRead::readCompressedSglFixed);
-        List<Fixed> rotationY = readList(stream, rotationKeyFrames, offsets.get(7).getValue(), BattleMeshRead::readCompressedSglFixed);
-        List<Fixed> rotationZ = readList(stream, rotationKeyFrames, offsets.get(8).getValue(), BattleMeshRead::readCompressedSglFixed);
-        List<Fixed> rotationTheta = readList(stream, rotationKeyFrames, offsets.get(9).getValue(), BattleMeshRead::readCompressedSglFixed);
+        List<Fixed> rotationX = readList(stream, rotationKeyFrames, offsets.get(6).getValue(), Sf3Util::readCompressedSglFixed);
+        List<Fixed> rotationY = readList(stream, rotationKeyFrames, offsets.get(7).getValue(), Sf3Util::readCompressedSglFixed);
+        List<Fixed> rotationZ = readList(stream, rotationKeyFrames, offsets.get(8).getValue(), Sf3Util::readCompressedSglFixed);
+        List<Fixed> rotationTheta = readList(stream, rotationKeyFrames, offsets.get(9).getValue(), Sf3Util::readCompressedSglFixed);
 
-        List<Fixed> scaleX = readList(stream, scaleKeyFrames, offsets.get(10).getValue(), BattleMeshRead::readSglFixed);
-        List<Fixed> scaleY = readList(stream, scaleKeyFrames, offsets.get(11).getValue(), BattleMeshRead::readSglFixed);
-        List<Fixed> scaleZ = readList(stream, scaleKeyFrames, offsets.get(12).getValue(), BattleMeshRead::readSglFixed);
+        List<Fixed> scaleX = readList(stream, scaleKeyFrames, offsets.get(10).getValue(), Sf3Util::readSglFixed);
+        List<Fixed> scaleY = readList(stream, scaleKeyFrames, offsets.get(11).getValue(), Sf3Util::readSglFixed);
+        List<Fixed> scaleZ = readList(stream, scaleKeyFrames, offsets.get(12).getValue(), Sf3Util::readSglFixed);
 
         entry.addProperty("translation", zip(translationTimes, zipPoints(translationX, translationY, translationZ)));
         entry.addProperty("rotation", zip(rotationTimes, zipRotations(rotationX, rotationY, rotationZ, rotationTheta)));
@@ -460,36 +460,6 @@ public class BattleMeshRead {
             points.add(new Quarternion(x.get(i), y.get(i), z.get(i), theta.get(i)));
         }
         return points;
-    }
-
-    public static Fixed readCompressedSglFixed(ImageInputStream stream) {
-        try {
-            // read 16 bits signed
-            short s = stream.readShort();
-            // sign extend to 32 bits
-            int i = (int) s;
-            // scale to correct value
-            int scaled = i << 2;
-            return new Fixed(scaled);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    public static Fixed readSglFixed(ImageInputStream stream) {
-        try {
-            return new Fixed(stream.readInt());
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    public static int readShort(ImageInputStream stream) {
-        try {
-            return stream.readShort();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     public static <E> List<E> readList(ImageInputStream stream, int size, int offset, Function<ImageInputStream, E> readFunction) throws IOException {
@@ -615,7 +585,7 @@ public class BattleMeshRead {
                     skeletonStream.seek(((skeletonStream.getStreamPosition() + 3) / 4) * 4);
                     Tag tag = new Tag(command);
                     tag.translation = new Point(skeletonStream);
-                    tag.rotation = new Quarternion(readSglFixed(skeletonStream), readSglFixed(skeletonStream), readSglFixed(skeletonStream), readSglFixed(skeletonStream));
+                    tag.rotation = new Quarternion(Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream));
                     tag.scale = new Point(skeletonStream);
                     boneStack.peek().addTag(tag);
                     break;

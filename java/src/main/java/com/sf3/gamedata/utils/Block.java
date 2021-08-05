@@ -3,6 +3,7 @@ package com.sf3.gamedata.utils;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** A block in the file.*/
 public class Block {
@@ -52,6 +53,16 @@ public class Block {
         return getProperties().containsKey(property) || getProperties().containsKey("_"+property);
     }
 
+    public void removeProperty(String name) {
+        getProperties().remove(name);
+    }
+
+    public <E> Stream<E> valuesStream(Class<E> filterType) {
+        return getProperties().values().stream()
+                .filter(filterType::isInstance)
+                .map(filterType::cast);
+    }
+
     public int getInt(String name) {
         Object value = getObject(name);
         if (value == null) {
@@ -89,14 +100,6 @@ public class Block {
 
     @Override
     public String toString() {
-        /*
-        return "Block{" +
-                "name='" + name + '\'' +
-                ", num_properties=" + properties.size() +
-                ", start=" + start +
-                ", length=" + length +
-                '}';
-         */
         return toJson();
     }
 
@@ -117,5 +120,4 @@ public class Block {
 
         return entry;
     }
-
 }

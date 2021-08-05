@@ -5,6 +5,7 @@ import com.sf3.util.ImageLoader;
 import com.sf3.util.ImagePanel;
 import com.sf3.util.SettingsPanel;
 import com.sf3.util.StatusBar;
+import com.sf3.vdp1.gui.Vdp1Model;
 
 import javax.swing.*;
 import java.awt.*;
@@ -16,8 +17,8 @@ import java.nio.file.Paths;
 public class FindTextureMain {
 
     public static void main(String[] args) {
-        String baseDir = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk/";
-        String filename = baseDir+"bin/x8pc00a.bin";
+        String baseDir = System.getProperty("user.home")+"/";
+        String filename = baseDir+"sara02.mpd";
 //        String filename = baseDir + "mpd/sara02.mpd";
 //        String filename = baseDir + "mpd/void.mpd";
 //        String filename = baseDir + "mpd/tesmap.mpd";
@@ -66,8 +67,11 @@ public class FindTextureMain {
         ImagePanel imagePanel = new ImagePanel(pm.getModel(FindTextureModel.IMAGE),
                 pm.getModel(FindTextureModel.SCALE),
                 pm.getModel(FindTextureModel.IMAGE_PANEL_SIZE),
-                pm.getModel(FindTextureModel.MOUSE_POS)
-        );
+                pm.getModel(FindTextureModel.MOUSE_POS),
+                pm.getModel(FindTextureModel.TEXTURE_WIDTH),
+                pm.getModel(FindTextureModel.FILE_OFFSET),
+                pm.getModel(FindTextureModel.HIGHLIGHT_GROUPS)
+                );
         return imagePanel;
     }
 

@@ -114,6 +114,26 @@ public class PolygonData extends Block {
         return polygons;
     }
 
+    public int getPointsOffset() {
+        return pointsOffset;
+    }
+
+    public int getNumPoints() {
+        return numPoints;
+    }
+
+    public int getPolygonOffset() {
+        return polygonOffset;
+    }
+
+    public int getNumPolygons() {
+        return numPolygons;
+    }
+
+    public int getPolygonAttributesOffset() {
+        return polygonAttributesOffset;
+    }
+
     @Override
     public String toString() {
         if (points == null) {

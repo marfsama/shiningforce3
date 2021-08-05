@@ -27,6 +27,10 @@ public class DecompressedStream {
         return result;
     }
 
+    public int getSize() {
+        return result.length;
+    }
+
     public ImageInputStream toStream() {
         ByteArrayImageInputStream stream = new ByteArrayImageInputStream(result);
         stream.setByteOrder(byteOrder);

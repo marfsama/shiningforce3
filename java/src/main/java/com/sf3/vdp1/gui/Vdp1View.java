@@ -74,8 +74,9 @@ public class Vdp1View extends JFrame {
         return new ImagePanel(pm.getModel(Vdp1Model.IMAGE),
                 pm.getModel(Vdp1Model.SCALE),
                 pm.getModel(Vdp1Model.IMAGE_PANEL_SIZE),
-                pm.getModel(Vdp1Model.MOUSE_POS)
-        );
+                pm.getModel(Vdp1Model.MOUSE_POS),
+                pm.getModel(Vdp1Model.TEXTURE_WIDTH),
+                pm.getModel(Vdp1Model.FILE_OFFSET));
     }
 
 

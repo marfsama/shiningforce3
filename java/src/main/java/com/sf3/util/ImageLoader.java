@@ -57,8 +57,9 @@ public class ImageLoader {
         int columns = imageWidth / textureWidth;
         int offset = (Integer) fileOffset.getValue();
         try (InputStream inputStream = inputStreamSuppier.getInputStream()) {
-            if (inputStream == null)
+            if (inputStream == null) {
                 return;
+            }
             MemoryCacheImageInputStream stream = new MemoryCacheImageInputStream(inputStream);
             stream.setByteOrder((ByteOrder) byteOrder.getValue());
             stream.skipBytes(offset);
