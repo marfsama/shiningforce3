@@ -1,4 +1,34 @@
-# Header (size: 0x2000)
+# Description
+
+The mpd files (Map Data) contain the 3d map data for normal travel and battle. Maps consist of
+
+* Meshes like buildings, trees
+* movable or interactible meshes like barrels and chests
+* textures and animated textures
+* skybox images
+* heightmap with textures
+* rotating scrolls used as ground (i.e. water)
+* (wild guess) walkmesh
+* (wild guess) terrain movement costs
+
+(Note: The file should also contain the mesh data for individual battle, but I haven't found it yet)
+
+The file is split in a header, which is always loaded to 0x290000, and a list of chunks. The individual chunks are
+mostly compressed and are loaded to individual memory locations depending on the content.
+
+# File Structure
+
+![01 File Overview](img/01_file_overview.png)
+
+| Offset   | Name         | Type       | Count  | Description |
+|----------|--------------|------------|--------|-------------|
+| 0x00     | header       | Header     |   1    | File header. See description in [Chapter Header](#header)
+| 0x2000   | chunk_table  | ChunkTable |   1    | Table with chunk offsets and sized. See description in [Chapter Chunks](#chunks)
+| 0x2100   | chunks       | Chunk[]    | 0..20  | At most 20 chunks. See description in [Chapter Chunks](#chunks)
+
+
+# Header
+
 The total header size is always 0x2000 bytes. Unused bytes
 are padded with zero.
 
@@ -15,7 +45,7 @@ are padded with zero.
 
 | Offset  | Name    | Type  | Count | Description |
 |---------|---------|-------|------|-------------|
-| offset1 | offset2 | dword |  1   | second header indirection. pointer to sub sub header
+| 0x00    | offset2 | dword |  1   | second header indirection. pointer to sub sub header
 
 
 ## Sub Sub Header: size:  0x58 (88) bytes
@@ -160,37 +190,43 @@ end-of-list marker stop processing the list, don't read the unknown word.
     |  | #Polydata_List2                     |  |
     |  +-------------------------------------+  |
     +-------------------------------------------+
-    
-    
-# Chunk Dictionary @ 0x2000 (size: 0x100 bytes)
+
+
+# Chunks
+
+Chunks are memory blocks which may be compressed and are placed in specific memory locations, depending on the content.
+The chunks are always in the same order, but not all files need all chunk types. 
+
+| Chunk Index | Name                     | Description
+|-------------|--------------------------|------------
+|    0        | empty_1                  | This chunk always seem to be empty (size 0).
+|    1        | static_objects           | Static map objects. Mesh data and position/rotation/scale.
+|    2        | surface                  | Surface texture, surface normals and an unknown surface attribute. The chunk is compressed
+|    3        | texture_animation_images | Images for animated textures. Each image is individually compressed.
+|    4        | empty_2                  | This chunk always seem to be empty (size 0).
+|    5        | surface_meshes           | Heightmap for each surface tile and some unknown surface attributes. Might be walkmesh and movement costs. The chunk is compressed.
+|  6 - 10     | textures                 | Texture images. The chunks are compressed.
+| 11 - 13     | object_textures          | Textures for moveable objects (see [Header](#header)). The chunks are compressed.
+| 14 - 19     | scroll_panes             | Memory blocks for scroll panes (skybox) and rotating scrolls (ground). The chunks are compressed.
+
+## Chunk Table
+
+Size: 20 * 8 bytes (160 Bytes)
+
+Always starts at  offset 0x2000. The table only contains the offsets and the sizes. Unused chunks have the offset
+of the next chuck (so, the offset of the next free location in the file) and a size of zero.
+
+The first chunk starts at 0x2100. As the first chunk is always [static objects](#static-objects), this is the chunk at
+0x2100.
 
 | Offset | Name               | Type           | Count | Description
 |--------|--------------------|----------------|-------|-----------------------------
-| 0x00   |                    | offset         |   1   | unknown. size is always 0x00
-| 0x08   | offset_map_objects | offset         |   1   | offset to map objects chunk
-| 0x10   | offset_surface1    | offset         |   1   | offset to chunk containing some kind of unknown surface data. may be empty (size = 0)  
-| 0x18   | texture_anim_data  | offset         |   1   | offset to compresses texture animations. #TextureAnimations describes the content of the chunk.
-| 0x20   | offset[0]          | offset         |   1   | usually empty
-| 0x28   | offset[1]          | offset         |   1   | some kind of map data. line width 128 pixels, 256 bytes
-| 0x30   | offset[2]          | offset         |   1   | compressed textures
-| 0x38   | offset[3]          | offset         |   1   | compressed textures
-| 0x40   | offset[4]          | offset         |   1   | compressed textures
-| 0x48   | offset[5]          | offset         |   1   | compressed textures
-| 0x50   | offset[6]          | offset         |   1   | compressed textures
-| 0x58   | offset[7]          | offset         |   1   | unknown offsets to data chunks
-| 0x60   | offset[8]          | offset         |   1   | unknown offsets to data chunks
-| 0x68   | offset[9]          | offset         |   1   | unknown offsets to data chunks
-| 0x70   | offset[10]         | offset         |   1   | unknown offsets to data chunks
-| 0x78   | offset[11]         | offset         |   1   | unknown offsets to data chunks
-| 0x80   | offset[12]         | offset         |   1   | unknown offsets to data chunks
-| 0x88   | offset[13]         | offset         |   1   | unknown offsets to data chunks
-| 0x90   | offset[14]         | offset         |   1   | unknown offsets to data chunks
-| 0x98   | offset[15]         | offset         |   1   | unknown offsets to data chunks
-| 0xa0   | offset[16]         | offset         |   1   | unknown offsets to data chunks
-| 0xa8   | offset[17]         | offset         |   1   | unknown offsets to data chunks
-| 0xb0   | padding            | byte           |  80   | padding
+| 0x00   | chunk_offsets      | offset[]       |  20   | offsets and sizes of the chunk.
 
-## Offset: size: 0x10 (8) bytes
+
+## Offset
+
+Size: 8 bytes
 
 | Offset | Name    | Type   | Count | Description
 |--------|---------|--------|-------|-----------------------------
@@ -199,22 +235,30 @@ end-of-list marker stop processing the list, don't read the unknown word.
 
 
 
-# Map Objects @ 0x2100
+# Static Objects
 
-Note: the offsets here sometimes have another base than 0x290000.
-nasu00.mpd and tesmap.mpd have offset base of 0x60a0000 
+Describes the static meshes in the maps. These are mostly buildings, fences, trees and similar. Some maps use static
+objects for floor tiles too.
+
+Note: This whole file is normally loaded to 0x290000, so this chunk will be at offset 0x292100 and all offsets in this
+chunk are relative to 0x292100. In some maps only this chunk is loaded to 0x60a0000, so you have to adjust the
+logic to make these offsets relative to the file.
 
 ## Header
+
 | Offset | Name         | Type      | Count       | Description
 |--------|--------------|-----------|-------------|-----------------------------
-| 0x00   | offset       | dword     |   1         | unknown
-| 0x04   | offset       | dword     |   1         | unknown
+| 0x00   | offset1      | dword     |   1         | offset to unknown stuff. see (#offset1)
+| 0x04   | offset2      | dword     |   1         | offset to unknown stuff. see (#offset1)
 | 0x08   | num_objects  | word      |   1         | number of objects 
 | 0x0A   |              | word      |   1         | padding, 0x00
-| 0x0C   | model_head[] | ModelHead | num_objects | for each model a #ModelHead structure.    
+| 0x0C   | model_head[] | ModelHead | num_objects | for each model a [Model Head](#model-head) structure.    
 
 
-## ModelHead, size: 0x3C (60) bytes
+## Model Head
+
+Size: 0x3C (60) bytes
+
 | Offset | Name            | Type      | Count | Description
 |--------|-----------------|-----------|-------|-----------------------------
 | 0x00   | pdata_offsets[] | dword     |   8   | 8 offsets to #PDATA structures. These pdata points to the same mesh and different face attributes (#ATTR).
