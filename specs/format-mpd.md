@@ -29,168 +29,140 @@ mostly compressed and are loaded to individual memory locations depending on the
 
 # Header
 
-The total header size is always 0x2000 bytes. Unused bytes
-are padded with zero.
+The total header size is always 0x2000 bytes. Unused bytes are padded with zero. 
 
-## File header: size: 12 bytes
+
+## File header
+
+Size: 12 bytes
+
+The first int32 in the file is an offset to a sub header, which contains just another offset to the final header.
 
 | Offset | Name    | Type  | Count | Description |
 |--------|---------|-------|------|-------------|
-| 0x00   | offset1 | dword |  1   | first header indirection. pointer to sub header
-| 0x04   |         | dword |  2   | zero (0x0). padding? 
+| 0x00   | offset1 | int32 |  1   | first header indirection. pointer to sub header
+| 0x04   |         | int32 |  2   | zero (0x0). padding? 
 
+## Sub Header
 
+Size: 4 bytes
 
-## Sub Header: size: 4 bytes
+Just an offset to the final header.
 
 | Offset  | Name    | Type  | Count | Description |
 |---------|---------|-------|------|-------------|
-| 0x00    | offset2 | dword |  1   | second header indirection. pointer to sub sub header
+| 0x00    | offset2 | int32 |  1   | second header indirection. pointer to sub sub header
 
 
-## Sub Sub Header: size:  0x58 (88) bytes
- 
-| Offset  | Name    | Type  | Count | Description |
-|---------|---------|-------|------|--------------|
-|  0x00   |         | word  |  1   | two small bytes. maybe 2 counts
-|  0x02   |         | word  |  1   | zero 0x0000
-|  0x04   | offset1 | dword |  1   | always 0x0c. pointer to 0x20 unknown words at the start of the file.
-|  0x08   | offset2 | dword |  1   | always 0x4c. pointer to unknown dword at the start of the file.
-|  0x0C   | offset3 | dword |  1   | always 0x50. pointer to 0x20 unknown words at the start of the file. Mostly zero or 0x8000
-|  0x10   |         | dword |  1   | unknown. count? maybe two words
-|  0x14   | offset4 | dword |  1   | always 0x90. 4 bytes, always 0xffff
-|  0x18   | offset_texture_groups | dword |  1   | offset to list of texture groups
-|  0x1C   | offset6 | dword |  1   | pointer to unknown list. 
-|  0x20   | offset7 | dword |  1   | pointer to unknown list.
-|  0x24   | offset8 | dword |  1   | pointer to #polydata_list @see "Polydata List". the list contains 2 entries. may be null 
-|  0x28   | offset9 | dword |  1   | pointer to #polydata_list @see "Polydata List". the list contains 2 entries. may be null
-|  0x2C   |         | dword |  1   | always zero 0x0 
-|  0x30   |         | dword |  1   | const 0x8000b334
-|  0x34   |         | dword |  1   | const 0x4ccc0000
-|  0x38   | offset10| dword |  1   | sometimes pointer to list of size 0x10, sometimes unused 
-|  0x3C   | offset11| dword |  1   | pointer to list of 0x100 words. these may be FIXED
-|  0x40   | offset12| dword |  1   | pointer to list of 0x100 words. looks similar to offset11. may be unused.
-|  0x44   |         | dword |  1   | small value, may be negative
-|  0x48   |         | dword |  1   | const 0xc000
-|  0x4C   |         | dword |  1   | zero 
-|  0x50   |         | dword |  1   | unknown. small value in upper word, 0x0000 in lower word. 
-|  0x54   | offset12| dword |  1   | pointer to unknown list 
+## Sub Sub Header
+
+Size:  0x58 (88) bytes
+
+This is the header.
+
+| Offset  | Name      | Type  | Count | Description |
+|---------|-----------|-------|------|--------------|
+|  0x00   | unknown_1 | int16 |  1   | Unknown. Might be map id.
+|  0x02   | unknown_2 | int16 |  1   | Always zero 0x0000
+|  0x04   | offset1   | int32 |  1   | Always 0x0c. Pointer to 0x20 unknown int16. See (#header-offset-1).
+|  0x08   | offset2   | int32 |  1   | Always 0x4c. pointer to a single unknown int32. See (#header-offset-2).
+|  0x0C   | offset3   | int32 |  1   | Always 0x50. pointer to 0x20 unknown int16s at the start of the file. Mostly zero or 0x8000. (#header-offset-3)
+|  0x10   | unknown_3 | int16 |  1   | Unknown small value. maybe some count?
+|  0x12   | unknown_4 | int16 |  1   | Always zero
+|  0x14   | offset4   | int32 |  1   | Always 0x90. Pointer to unknown structure. See (#header-offset-4)
+|  0x18   | offset_texture_groups | int32 |  1   | Offset to list of texture groups. See (#texture-groups)
+|  0x1C   | offset6   | int32 |  1   | Pointer to unknown list. 
+|  0x20   | offset7   | int32 |  1   | Pointer to unknown list.
+|  0x24   | offset_mesh_1 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null. 
+|  0x28   | offset_mesh_2 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null.
+|  0x2C   | offset_mesh_3 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null.
+|  0x30   | const_1   | int32 |  1   | Const 0x8000b334
+|  0x34   | const_2   | int32 |  1   | Const 0x4ccc0000
+|  0x38   | offset11  | int32 |  1   | Sometimes pointer to list small uint16, the list end is marked by 0xffff. May be null. 
+|  0x3C   | offset_pal_1  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
+|  0x40   | offset_pal_2  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
+|  0x44   | unknown_5 | int32 |  1   | Unknown small value, may be negative.
+|  0x48   | const_3   | int32 |  1   | Const 0xc000
+|  0x4C   | unknown_6 | int32 |  1   | Unknown. Lower 16 bits often null. May me FIXED.
+|  0x50   | unknown_7 | int32 |  1   | Unknown. Small value in upper int16, 0x0000 in lower int16. May me FIXED. 
+|  0x54   | offset12  | int32 |  1   | Pointer to unknown list of exactly 8 uint16 in two block with 4 uint16 each.
+
+## Header Offset 1
+
+This list contains exactly 32 (0x20) int16 values. The purpose is unknown.
+
+The values are sometimes repeated in blocks of 2 and strictly ascending and sometimes there is no visible pattern.
+The step from one value to the next is often 0x421.
+
+## Header Offset 2
+
+This list contains exactly one int32 value. The purpose is unknown.
+
+This value can be the same in different maps (0xa2246167 in sara02-sara04) or totally different (0xbe6858ef in bochi).
+
+## Header Offset 3
+
+This list contains exactly 16 int32 or 32 int16 values. The purpose is unknown.
+
+This list is most often filled with zeros.
+
+## Header Offset 4
+
+Size: 16 bytes
+
+This list contains some unknown structures. The value_1 are ascending with step 1. The values pointed to by offset_1 
+and offset_2 are small (< 0x100) and are in the same range. They don't need to be ascending, but there won't be 
+duplicates.
 
 
-## Polydata List: size: 0x1c (28) bytes
-The polydata list is optional and may be missing.
-Sometimes the data is in the file, but there is no pointer
-to the structure in the header, so it is "dangling". 
-The list usually contains 2 of these entries. 
- 
-| Offset | Name              | Type  | Count | Description |
-|--------|-------------------|-------|-------|--------------|
-| 0x00   | offset_polydata_1 | dword |   1   | pointer to PDATA (see SGL)
-| 0x04   |                   | dword |   6   | unknown. maybe FIXED.
+| Offset | Name     | Type  | Count | Description  |
+|--------|----------|-------|-------|--------------|
+| 0x00   | value_1  | int32 |   1   | Unknown small value. 0xffff when the list is finished. 
+| 0x04   | offset_1 | int32 |   1   | Pointer to list of small short values. The list is terminated by 0xffff.
+| 0x08   | offset_2 | int32 |   1   | Pointer to list of small short values. The list is terminated by 0xffff.
+| 0x0C   | value_2  | int32 |   1   | Unknown value, mostly zero.
 
+## Texture Groups
 
-## Texture Animations (size: 8 bytes + texture animation frames)
-
-Index into Texture Chunk textures[0]. This is a list which is delimited by a texture group 
-of 0xffff. In case of a texture group of 0xffff no further data is read.
+This is a list of texture groups which themselves have a list of the textures for the animation.
+The end of the texture group list is marked by 0xffff (texture_group = 0xffff).
 
 | Offset | Name           | Type  | Count | Description |
 |--------|----------------|-------|-------|--------------|
-| 0x00   | texture_group  | word  |   1   | Texture number for SGL.
-| 0x02   | texture_width  | word  |   1   | width of textures in this group
-| 0x04   | texture_height | word  |   1   | height of textures in this group
-| 0x06   |                | word  |   1   | unknown small value. maybe animation speed
-| 0x08   | frames[]      | TextureFrame |   ?   | List of Texture Animation Frames.
+| 0x00   | texture_group  | int16  |   1   | Texture number for SGL.
+| 0x02   | texture_width  | int16  |   1   | width of textures in this group
+| 0x04   | texture_height | int16  |   1   | height of textures in this group
+| 0x06   |                | int16  |   1   | unknown small value. maybe animation speed
+| 0x08   | frames[]      | [TextureFrame](#texture-frame) |   ?   | List of Texture Animation Frames.
 
-## Texture Frame (size: 4 bytes)
+## Texture Frame
 
-List of textures in Animation. Please note that this offsets into the 
-*compressed* data. Only one texture image is compressed in this entry.
-The end of the list is denoted by an offset of 0xfffe. When encountering this
-end-of-list marker stop processing the list, don't read the unknown word. 
+Size: 4 bytes
 
-| Offset | Name    | Type  | Count | Description |
-|--------|---------|-------|-------|-------------|
-| 0x00   | offset  | word  |   1   | offset into compressed data
-| 0x02   | unknown | word  |   1   | unknown small value
+List of textures in the animation. The offsets points into the
+*compressed* data, only one texture image is compressed in this entry.
+The end of the list is marked by an offset of 0xfffe.
+
+| Offset | Name    | Type   | Count | Description |
+|--------|---------|--------|-------|-------------|
+| 0x00   | offset  | uint16 |   1   | offset into compressed data
+| 0x02   | unknown | int16  |   1   | unknown small value
 
 
-## Structure of header (everything < 0x2000)
-<!-- language: lang-none -->
-    +-------------------------------------------+
-    | #start_of_file (0x00)                     |
-    | - size always 0xc bytes                   |
-    | - offset to #subheader                    |
-    +-------------------------------------------+
-    | #list1 (0xc)                              |
-    | - size always 0x40 bytes                  |
-    | #list2 (0x4c)                             |
-    | - size always 0x4 bytes                   |
-    | #list3 (0x50)                             |
-    | - size always 0x40 bytes                  |
-    | #list4 (0x90)                             |
-    | - size always 0x4 bytes                   |
-    | #list5                                    |
-    | #list6                                    |
-    | #list7                                    |
-    | #list12                                   |
-    | #list10                                   |
-    | #list11                                   |
-    +-------------------------------------------+
-    | #subsubheader                             |
-    | - offset to #list1                        |
-    | - offset to #list2                        |
-    | - offset to #list3                        |
-    | - offset to #list4                        |
-    | - offset to #list5                        |
-    | - offset to #list6                        |
-    | - offset to #list7                        |
-    | - offset to #list8                        |
-    | - offset to #list9                        |
-    | - offset to #list10                       |
-    | - offset to #list11                       |
-    | - offset to #list12                       |
-    +-------------------------------------------+
-    | #subheader                                |
-    | - offset to #subsubheader                 |
-    +-------------------------------------------+
-    |  - this block is optional and may be      |
-    |    missing                                |
-    |  +-------------------------------------+  |
-    |  | #vertices_pdata1                    |  |
-    |  |  - list of #SGL_POINT for #pdata1   |  |
-    |  | #faces_pdata1                       |  |
-    |  |  - list of #SGL_POLYGON for #pdata1 |  |
-    |  | #face_attributes_pdata1             |  |
-    |  | - list of #SGL_ATTR  for #pdata1    |  |
-    |  | #pdata1 (#SGL_PDATA)                |  |
-    |  +-------------------------------------+  |
-    |  | #vertices_pdata2                    |  |
-    |  | #faces_pdata2                       |  |
-    |  | #face_attributes_pdata2             |  |
-    |  | #pdata2 (#SGL_PDATA)                |  |
-    |  +-------------------------------------+  |
-    |  | #Polydata_List1                     |  |
-    |  +-------------------------------------+  |
-    |                                           |
-    |  +-------------------------------------+  |
-    |  | #vertices_pdata1                    |  |
-    |  |  - list of #SGL_POINT for #pdata1   |  |
-    |  | #faces_pdata1                       |  |
-    |  |  - list of #SGL_POLYGON for #pdata1 |  |
-    |  | #face_attributes_pdata1             |  |
-    |  | - list of #SGL_ATTR  for #pdata1    |  |
-    |  | #pdata1 (#SGL_PDATA)                |  |
-    |  +-------------------------------------+  |
-    |  | #vertices_pdata2                    |  |
-    |  | #faces_pdata2                       |  |
-    |  | #face_attributes_pdata2             |  |
-    |  | #pdata2 (#SGL_PDATA)                |  |
-    |  +-------------------------------------+  |
-    |  | #Polydata_List2                     |  |
-    |  +-------------------------------------+  |
-    +-------------------------------------------+
+## Moveable or interactible objects
 
+Size: 0x1c (28) bytes
+
+The objects list contains meshes for barrels, chest and crates. The end of the list is marked by 0x0.
+Sometimes the data is in the file, but the pointer in the header is null, so it is "dangling".
+
+
+| Offset | Name              | Type  | Count | Description |
+|--------|-------------------|-------|-------|--------------|
+| 0x00   | offset_polydata   | int32 |   1   | pointer to PDATA (see SGL)
+| 0x04   | position          | int16 |   3   | Integer part of the position. Decimal part is 0x0000
+| 0x0A   | rotation          | ANGLE |   1   | Rotation of the mesh.
+| 0x10   | scale             | FIXED |   3   | Scale of the mesh.
 
 # Chunks
 
@@ -213,10 +185,10 @@ The chunks are always in the same order, but not all files need all chunk types.
 
 Some Chunks use some kind of LZ77 compression.
 
-The chunk is divided in "lines", which consists of a word "control" and
-16 words data. One bit in control corresponds to one word of the data,
-starting with msb of control. Cleared bit in control means "data word",
-set bit in control means "command word".
+The chunk is divided in "lines", which consists of a int16 "control" and
+16 int16s data. One bit in control corresponds to one int16 of the data,
+starting with msb of control. Cleared bit in control means "data int16",
+set bit in control means "command int16".
 
 ## Chunk Table
 
@@ -239,8 +211,8 @@ Size: 8 bytes
 
 | Offset | Name    | Type   | Count | Description
 |--------|---------|--------|-------|-----------------------------
-| 0x0    | offset  | dword  |   1   | offset to chunk
-| 0x4    | size    | dword  |   1   | size of chunk
+| 0x0    | offset  | int32  |   1   | offset to chunk
+| 0x4    | size    | int32  |   1   | size of chunk
 
 
 
@@ -258,7 +230,7 @@ The structure of the stuff behind the `offset1` and `offset2` is known, but the 
 
 ## Structure
 
-![mesh overview](02_mesh_overview.png)
+![mesh overview](img/02_mesh_overview.png)
 
 The chunk consists of the header with the mesh list and the PDATA structures. The order of the PDATA list is: PDATA, 
 list of POINTs, list of POLYGONs and list of polygon ATTRs. After the PDATA structure there are two unknown list of 
@@ -268,10 +240,10 @@ stuff.
 
 | Offset | Name         | Type      | Count       | Description
 |--------|--------------|-----------|-------------|-----------------------------
-| 0x00   | offset1      | dword     |   1         | offset to unknown stuff. see (#static-objects-offset1). May be null.
-| 0x04   | offset2      | dword     |   1         | offset to unknown stuff. see (#static-objects-offset2). May be null.
-| 0x08   | num_meshes   | word      |   1         | number of objects
-| 0x0A   |              | word      |   1         | padding, 0x00
+| 0x00   | offset1      | int32     |   1         | offset to unknown stuff. see (#static-objects-offset1). May be null.
+| 0x04   | offset2      | int32     |   1         | offset to unknown stuff. see (#static-objects-offset2). May be null.
+| 0x08   | num_meshes   | int16      |   1         | number of objects
+| 0x0A   |              | int16      |   1         | padding, 0x00
 | 0x0C   | meshes[]     | Mesh[]    | num_meshes  | for each mesh a [Mesh](#model-head) structure.    
 
 
@@ -286,7 +258,7 @@ Note: for PDATA see SGL Reference.
 
 | Offset | Name            | Type      | Count | Description
 |--------|-----------------|-----------|-------|-----------------------------
-| 0x00   | pdata_offsets[] | dword     |   8   | 8 offsets to #PDATA structures. These pdata points to the same mesh and different face attributes (#ATTR).
+| 0x00   | pdata_offsets[] | int32     |   8   | 8 offsets to #PDATA structures. These pdata points to the same mesh and different face attributes (#ATTR).
 | 0x20   | position        | int16[3]  |   1   | position of the mesh in x,y,z. Only the integer part.
 | 0x26   | rotation        | ANGLE[3]  |   1   | rotation of the mesh in SGL ANGLE.
 | 0x2C   | scale           | FIXED[3]  |   1   | scale of the mesh
@@ -722,8 +694,8 @@ Unused texture chunks are present (size > 0), but the num_textures are 0.
 
 | Offset | Name            | Type      | Count        | Description
 |--------|-----------------|-----------|--------------|-----------------------------
-| 0x00   | num_textures    | word      |   1          | number of  textures in chunk
-| 0x02   | texture_id_start| word      |   1          | start id of the textures in this block.
+| 0x00   | num_textures    | int16      |   1          | number of  textures in chunk
+| 0x02   | texture_id_start| int16      |   1          | start id of the textures in this block.
 | 0x04   | texture_def[]   | TextureDefinition | num_textures | texture definitions
 | ???    | texture_data    | byte      |   ?          | texture data         
 
@@ -733,9 +705,9 @@ Size: 4 byte
 
 | Offset | Name     | Type | Count | Description
 |--------|----------|------|-------|-----------------------------
-| 0x00   | width    | byte |   1   | width of texture
-| 0x01   | height   | byte |   1   | height of texture
-| 0x02   | offset   | word |   1   | byte offset of texture in decompressed data stream
+| 0x00   | width    | uint8 |   1   | width of texture
+| 0x01   | height   | uint8 |   1   | height of texture
+| 0x02   | offset   | int16 |   1   | byte offset of texture in decompressed data stream
 
 
 # Scroll Panes
@@ -792,6 +764,7 @@ first tile is shown. The white areas are part of the file, they are zeroed out (
 
 ![First page of sara02.mpd](img/06_sara02_page0.png)
 ![Second page of sara02.mpd](img/07_sara02_page1.png)
+
 ![water animation sara02.mpd](img/08_sara02_water.gif)
 
 First and second page of the rotating scroll screen of sara02.mpd. The pages in sara02 form an animation, so presumably
@@ -799,6 +772,7 @@ the scroll map is filled with 4x4 of the same page. Every few frames the next pa
 way the animation is created.
 
 ![Skybox from sara06.mpd](img/09_sara06_skybox.png)
+
 ![Skybox from in game from bridge battle (taken with yabause)](img/10_sara06_ingame_skybox.png)
 
 Skybox from the file sara06.mpd chunk 4 (512x128) and taken from the game with yabause (NBG0, 320x320). Note the mountain in the
@@ -807,6 +781,8 @@ background which matches in both files, whereas in the game there are some build
 # Issues and open points
 
 * document header
+* read list at offset6 and offset7. used in sara02 and sara04
+* plot small values (< 0x100) throughout the various lists so similarities can be found.
 
 
 # References
