@@ -57,9 +57,38 @@ public abstract class MpdRead {
         put("furain.mpd", 0x60a0000);
         put("gdi5.mpd", 0x60a0000);
         put("gdi.mpd", 0x60a0000);
+        put("zlv1.mpd", 0x60a0000);
+        put("zlv2.mpd", 0x60a0000);
+        put("zlv3.mpd", 0x60a0000);
+        put("zlv4.mpd", 0x60a0000);
+        put("yaka2.mpd", 0x60a0000);
+        put("yaka3.mpd", 0x60a0000);
+        put("yaka4.mpd", 0x60a0000);
+        put("point.mpd", 0x60a0000);
+        put("hrnaka.mpd", 0x60a0000);
+        put("hrrail.mpd", 0x60a0000);
+        put("inka00.mpd", 0x60a0000);
+//        put("jousai.mpd", 0x60a0000);
+        put("mgma00.mpd", 0x60a0000);
+        put("mgma01.mpd", 0x60a0000);
+        put("muhasi.mpd", 0x60a0000);
+        put("sara05.mpd", 0x60a0000);
+        put("shief1.mpd", 0x60a0000);
+        put("shief2.mpd", 0x60a0000);
+        put("shief3.mpd", 0x60a0000);
+        put("shief4.mpd", 0x60a0000);
+        put("shief5.mpd", 0x60a0000);
+        put("shio00.mpd", 0x60a0000);
+        put("tnka00.mpd", 0x60a0000);
+        put("tomt00.mpd", 0x60a0000);
+        put("toue00.mpd", 0x60a0000);
+        put("tree00.mpd", 0x60a0000);
+        put("turi00.mpd", 0x60a0000);
+        put("turi01.mpd", 0x60a0000);
+        put("zoku00.mpd", 0x60a0000);
 
         // broken beyond repair
-        put("ship2.mpd" , 0x02477E8 + 0x2100);
+        put("ship2.mpd" , 0x250000+0x2100);
     }};
     public static final int DEFAULT_OFFSET = 0x292100;
     public static final int MAP_MEMORY_OFFSET = 0x290000;
@@ -75,28 +104,25 @@ public abstract class MpdRead {
             file.addProperty("size", new HexValue(file.getLength()));
             file.addProperty("filename", mpdFile.toAbsolutePath().toString());
             HighlightGroups highlightGroups = new HighlightGroups();
-            highlightGroups.addGroup("textureAnimations", 0xcc66ff);
-            highlightGroups.addGroup("pink", Color.PINK.getRGB());
             file.addProperty("highlights", highlightGroups);
 
 
             readHeader(highlightGroups, file, stream);
-            readChunkDirectory(file, stream);
-            readMapObjects(file, stream, filename);
-            readSurfaceTiles(stream, outPath, file, filename +".surface_tiles");
+            readChunkDirectory(highlightGroups, file, stream);
+            readMapObjects(highlightGroups, file, stream, filename);
+            readSurfaceTiles(highlightGroups, stream, outPath, file, filename +".surface_tiles");
             // read texture animations, updating the animation list in the header.
-            readTextureAnimationImages(stream, file, filename +".textureaminations");
+            readTextureAnimationImages(highlightGroups, stream, file, filename +".textureaminations");
 
-            readSurfaceBlock2(stream, file, outPath,filename +".surface2");
+            readSurfaceBlock2(highlightGroups, stream, file, outPath,filename +".surface2");
 
-            readTextureChunks(mpdFile, outPath, file, stream);
+            readTextureChunks(highlightGroups, mpdFile, outPath, file, stream);
 
-            // I think these are scroll screens. Some are background images (skybox). some seems
+            // I think these are scroll screens. Some are battle background images (skybox). some seems
             // to be ground textures like dirt or water.
             // Scroll screen can be a big image (bit map format) or a character indexed (cell format) pattern
             // page 65
-            // 3rd image (other[2]) seems to be some kind of scroll screen configuration (cell configuration)
-            dumpOtherChunks(mpdFile, outPath, file, stream);
+            dumpScrollPaneChunks(highlightGroups, mpdFile, outPath, file, stream);
 
 
             // write Surface Image with correct textures
@@ -113,19 +139,19 @@ public abstract class MpdRead {
     private static void writeTextureImage(Block file, Path outPath, String filename) {
         List<BufferedImage> textureImages = new ArrayList<>();
 
-        Block textureChunks = file.getBlock("texture_chunks");
-        for (Object value : textureChunks.getProperties().values()) {
-            if (value instanceof Block) {
-                Block textureChunk = (Block) value;
-                if (textureChunk.hasProperty("textures")) {
-                    List<Texture> textures = textureChunk.getObject("textures");
-                    textures.forEach(texture -> {
-                        texture.setTextureImageIndex(textureImages.size());
-                        textureImages.add(texture.getImage());
-                    });
-                }
-            }
-        }
+        List<Texture> textures = file.getBlock("texture_chunks")
+                .valuesStream(Block.class)
+                .filter(textureChunk -> textureChunk.hasProperty("textures"))
+                .map(textureChunk -> textureChunk.<List<Texture>>getObject("textures"))
+                .flatMap(List::stream)
+//                .sorted(Comparator.comparingInt(Texture::getWidth))
+                .collect(Collectors.toList());
+
+
+        textures.forEach(texture -> {
+            texture.setTextureImageIndex(textureImages.size());
+            textureImages.add(texture.getImage());
+        });
 
         List<TextureAnimation> textureAnimations = file.getBlock("header").getObject("texture_animations");
         textureAnimations.stream().map(TextureAnimation::getFrames)
@@ -135,13 +161,13 @@ public abstract class MpdRead {
                     textureImages.add(frame.image);
                 });
 
-        List<TextureUv> uvMap = Sf3Util.writeTextureImage(textureImages, new HashSet<Integer>(), outPath.resolve(filename + ".png").toAbsolutePath().toString(), 0, false);
+        List<TextureUv> uvMap = Sf3Util.writeTextureImage(textureImages, new HashSet<>(), outPath.resolve(filename + ".png").toAbsolutePath().toString(), 0, false);
         Block uvBlock = file.createBlock("uvs", 0, 0);
         uvBlock.addProperty("filename", filename+".png");
         uvBlock.addProperty("uv_map",uvMap);
     }
 
-    private Map<Integer, Texture> readTextureChunks(Path path, Path destinationPath, Block file, ImageInputStream stream) throws IOException {
+    private Map<Integer, Texture> readTextureChunks(HighlightGroups highlightGroups, Path path, Path destinationPath, Block file, ImageInputStream stream) throws IOException {
         List<Texture> textures = new ArrayList<>();
         Block chunkDirectory = file.getBlock("chunk_directory");
         Block textureChunks = file.createBlock("texture_chunks", 0, 0);
@@ -150,16 +176,14 @@ public abstract class MpdRead {
             i++;
             int offset = blockDescription.getInt("relativeOffset");
             int size = blockDescription.getInt("size");
+            highlightGroups.addRange("textures", offset, size);
             if (size == 0) {
                 textureChunks.addProperty(blockDescription.getName(), "chunk size is 0, skipped");
                 // note: normally this means there are no more textures, so the continue could also be a break
                 continue;
             }
 
-            // filename w/o extension. ".raw" and ".decompressed" will be appended
-            Path baseFilename = destinationPath.resolve(path.getFileName().toString() + ".texture" + i);
-
-            decompressChunk(stream, offset, size, baseFilename);
+            decompressChunk(stream, offset, size, null);
 
             try {
                 Block block = readTextures(stream, chunkDirectory, "textures[" + i + "]");
@@ -176,14 +200,12 @@ public abstract class MpdRead {
         for (Block blockDescription : chunkDirectory.valuesStream(Block.class).filter(b -> b.getName().startsWith("object_textures")).collect(Collectors.toList())) {
             int offset = blockDescription.getInt("relativeOffset");
             int size = blockDescription.getInt("size");
+            highlightGroups.addRange("object_textures", offset, size);
             if (size == 0) {
                 break;
             }
 
-            // filename w/o extension. ".raw" and ".decompressed" will be appended
-            Path baseFilename = destinationPath.resolve(path.getFileName().toString() + ".objecttexture" + i);
-
-            decompressChunk(stream, offset, size, baseFilename);
+            decompressChunk(stream, offset, size, null);
 
             try {
                 Block block = readTextures(stream, chunkDirectory, "object_textures[" + i + "]");
@@ -210,24 +232,28 @@ public abstract class MpdRead {
         byte[] buffer = new byte[size];
         stream.seek(offset);
         stream.readFully(buffer);
-        Path rawFilename = baseFilename.getParent().resolve(baseFilename.getFileName().toString()+".raw");
-        Files.write(rawFilename, buffer);
+        if (baseFilename != null) {
+            Path rawFilename = baseFilename.getParent().resolve(baseFilename.getFileName().toString() + ".raw");
+            Files.write(rawFilename, buffer);
+        }
         // try to decompress the chunk
         try {
             ImageInputStream byteStream = new ByteArrayImageInputStream(buffer);
             byteStream.setByteOrder(stream.getByteOrder());
             DecompressedStream decompressedStream = new DecompressedStream(byteStream);
             byte[] decompressesBytes = decompressedStream.getResult();
-            // byteStream should be exhausted when the entire chunk was compressed.
-            // otherwise the compression worked "by accident" and the chunk was not really compressed.
-            // note: leave some slack for padding bytes.
-            if (byteStream.getStreamPosition() >= (buffer.length - 16)) {
-                Path decompressedFilename = baseFilename.getParent().resolve(baseFilename.getFileName().toString() + ".decompressed");
-                Files.write(decompressedFilename, decompressesBytes);
+            if (baseFilename != null) {
+                // byteStream should be exhausted when the entire chunk was compressed.
+                // otherwise the compression worked "by accident" and the chunk was not really compressed.
+                // note: leave some slack for padding bytes.
+                if (byteStream.getStreamPosition() >= (buffer.length - 16)) {
+                    Path decompressedFilename = baseFilename.getParent().resolve(baseFilename.getFileName().toString() + ".decompressed");
+                    Files.write(decompressedFilename, decompressesBytes);
+                }
             }
             return decompressesBytes;
         } catch (Exception e) {
-
+            //e.printStackTrace();
         }
         return null;
     }
@@ -249,19 +275,33 @@ public abstract class MpdRead {
             for (int y = 0; y < 16*4; y++) {
                 Integer textureId = surface.getCharacter(x,y) & 0xff;
                 BufferedImage texture = textureMapFlipped.get(textureId & 0xff);
-                if (textureId != EMPTY_SURFACE_TILE && textureMap.containsKey(textureId)) {
+                if (!textureId.equals(EMPTY_SURFACE_TILE) && textureMap.containsKey(textureId)) {
                     g2d.drawImage(texture,x*16, y*16, 16, 16, null);
                 }
             }
         }
+//        g2d.setColor(Color.CYAN);
+//        for (int x = 0; x < 16; x++) {
+//            for (int y = 0; y < 16; y++) {
+//                for (int w = 0; w < 5; w++) {
+//                    for (int h = 0; h < 5; h++) {
+//                        Integer unknown = surface.getUnknown(x * 5 + w, y * 5 + h);
+//                        if (unknown > 0) {
+//                            g2d.drawArc(x * 16 * 4 - 4 + w * 16, y * 16 * 4 + h * 16, 8, 8, 0, 360);
+//                        }
+//                    }
+//                }
+//            }
+//        }
         g2d.dispose();
         ImageIO.write(image, "png", destinationPath.resolve(filename + ".block0.maxi0.textured_surface.png").toFile());
     }
 
-    private static void readSurfaceBlock2(ImageInputStream stream, Block file, Path destinationPath, String filename) throws IOException {
+    private void readSurfaceBlock2(HighlightGroups highlightGroups, ImageInputStream stream, Block file, Path destinationPath, String filename) throws IOException {
         Block blockDescription = file.getBlock("chunk_directory").getBlock("surface2");
         int offset = blockDescription.getInt("relativeOffset");
         int size = blockDescription.getInt("size");
+        highlightGroups.addRange("height_maps", offset, size);
 
         Block block = file.createBlock("surface2", offset, size);
         if (blockDescription.getInt("size") == 0) {
@@ -278,19 +318,49 @@ public abstract class MpdRead {
 
         tileStream.seek(0);
         Tile<Tile<Integer>> tile = new MaxiTile<>(64, 64, PolygonTile::new, tileStream);
-        writeMaxiTile(tile, value -> (value << 11) , 5, destinationPath,filename + ".surface0.maxi0", false);
+        writeMaxiTile(tile, value -> {
+            int a = value & 0xff;
+            int b = (value >> 8) & 0xff;
+            int c = (value >> 16) & 0xff;
+            int d = (value >> 24) & 0xff;
+            int height = (a + b + c + d) / 2;
+            return new Color(height, height, height).getRGB();
+        } , 16, destinationPath,filename + ".surface0.heightmap", false);
 
         Tile<Tile<Integer>> tile2 = new MaxiTile<>(64, 64,
                 (s) -> new MaxiTile<>(1, 1, Sf3Util::readUnsignedShort, s), tileStream);
-        writeMaxiTile(tile2, value -> Sf3Util.rgb16ToRgb24(value), 10, destinationPath,filename + ".surface0.maxi1a", false);
-        writeMaxiTile(tile2, value -> (value << 4), 10, destinationPath, filename + ".surface0.maxi1b", false);
+        writeMaxiTile(tile2, value -> {
+            int upper = (value >> 8) & 0xff;
+            return new Color(upper, upper, upper).getRGB();
+        }, 16, destinationPath,filename + ".surface0.maxi1a", false);
+        writeMaxiTile(tile2, value -> {
+            int v = ((value & 0xff) << 5);
+            v = Math.min(v, 0xff);
+            return new Color(v, v, v).getRGB();
+        }, 16, destinationPath, filename + ".surface0.movementcosts", false);
 
         Tile<Tile<Integer>> tile3 = new MaxiTile<>(64, 64,
                 (s) -> new MaxiTile<>(1, 1, Sf3Util::readUnsignedByte, s), tileStream);
-        writeMaxiTile(tile3, value -> (value << 11), 10, destinationPath, filename + ".surface0.maxi2", false);
+        writeMaxiTile(tile3, value -> {
+            int color = value * 3;
+            if (color == 0) {
+                return 0;
+            }
+
+            switch (color / 256) {
+                case 0:
+                    return new Color(color, 0, 0xff).getRGB();
+                case 1:
+                    return new Color(0xff, color - 256, 0).getRGB();
+                case 2:
+                    return new Color(0xff, 0xff, color - 256 * 2).getRGB();
+                default:
+                    return 0;
+            }
+        }, 16, destinationPath, filename + ".surface0.trigger", false);
     }
 
-    private static void readTextureAnimationImages(ImageInputStream stream, Block file, String filename) throws IOException {
+    private static void readTextureAnimationImages(HighlightGroups highlightGroups, ImageInputStream stream, Block file, String filename) throws IOException {
         Block chunkOffset = file.getBlock("chunk_directory").getBlock("texture_animation_data");
         List<TextureAnimation> textureAnimations = file.getBlock("header").getObject("texture_animations");
 
@@ -304,6 +374,7 @@ public abstract class MpdRead {
                 frame.image = Sf3Util.readBufferedImage(imageStream, textureAnimation.width, textureAnimation.height);
             }
         }
+        highlightGroups.addRange("texture_animations", offset, chunkOffset.getInt("size"));
     }
 
     private static Block readTextures(ImageInputStream stream, Block chunkDictionary, String blockName) throws IOException {
@@ -342,10 +413,11 @@ public abstract class MpdRead {
         return block;
     }
 
-    private static void readSurfaceTiles(ImageInputStream stream, Path outPath, Block file, String filename) throws IOException {
+    private void readSurfaceTiles(HighlightGroups highlightGroups, ImageInputStream stream, Path outPath, Block file, String filename) throws IOException {
         Block blockDescription = file.getBlock("chunk_directory").getBlock("surfaceData");
         int offset = blockDescription.getInt("relativeOffset");
         int size = blockDescription.getInt("size");
+        highlightGroups.addRange("surface_tiles", offset, size);
 
         Block block = file.createBlock("surface_tiles", offset, size);
         if (blockDescription.getInt("size") == 0) {
@@ -388,7 +460,7 @@ public abstract class MpdRead {
                 s -> new MaxiTile<>(5, 5, Sf3Util::readUnsignedByte, s), stream);
         block.addProperty("end_offset_block_2", new HexValue((int) stream.getStreamPosition()));
 
-        writeMaxiTile(thirdTiles, Sf3Util::rgb16ToRgb24, 8, outPath, filename+".unknown", true);
+        writeMaxiTile(thirdTiles, value -> new Color(value,value,value).getRGB(), 8, outPath, filename+".walkmesh", false);
         block.addProperty("tiles2", thirdTiles);
 
         block.addProperty("size", new HexValue((int) stream.getStreamPosition()-offset));
@@ -443,7 +515,7 @@ public abstract class MpdRead {
             return c;
         }
     }
-    private static <T> void writeMaxiTile(Tile<Tile<T>> tile, Function<T, Integer> toColorFunction, int scale, Path destinationPath, String filename, boolean writeTileIndices) {
+    private <T> void writeMaxiTile(Tile<Tile<T>> tile, Function<T, Integer> toColorFunction, int scale, Path destinationPath, String filename, boolean writeTileIndices) {
         int subWidth = tile.get(0).getWidth();
         int subHeight = tile.get(0).getHeight();
 
@@ -470,10 +542,9 @@ public abstract class MpdRead {
                 }
             }
         }
-
-        g2d.drawString("0x"+Integer.toHexString(tile.getStreamOffset()),20, 20);
-
         g2d.dispose();
+        image = this.flipVertically(image);
+
         try {
             ImageIO.write(image, "png", destinationPath.resolve(filename+".png").toFile());
         } catch (IOException e) {
@@ -481,7 +552,7 @@ public abstract class MpdRead {
         }
     }
 
-    private static void readChunkDirectory(Block file, ImageInputStream stream) throws IOException {
+    private static void readChunkDirectory(HighlightGroups highlightGroups, Block file, ImageInputStream stream) throws IOException {
         // note: chunk directory always start at 0x2000
         stream.seek(0x2000);
         Block chunk = file.createBlock("chunk_directory", (int) stream.getStreamPosition(), 0);
@@ -514,10 +585,11 @@ public abstract class MpdRead {
             }
             chunk.addBlock(offsetBlock);
         }
+        highlightGroups.addRange("chunk_directory", chunk.getStart(), (int) (stream.getStreamPosition()-chunk.getStart()));
     }
 
     private static Block readOffsetBlock(ImageInputStream stream, String name) throws IOException {
-        Block offsetBlock = new Block(name, (int) stream.getStreamPosition(), 16);
+        Block offsetBlock = new Block(name, (int) stream.getStreamPosition(), 8);
         // offset in system memory
         int offset = stream.readInt();
         offsetBlock.addProperty("offset", new HexValue(offset));
@@ -537,7 +609,7 @@ public abstract class MpdRead {
         Block stuff = new Block("object_"+num, offset, 0);
         int meshNo = 0;
         while (true) {
-            int mesh_offset = readPointer(stream, highlightGroups, "stuff_at_offset_8");
+            int mesh_offset = readPointer(stream, highlightGroups, "header_objects");
             if (mesh_offset == 0) {
                 break;
             }
@@ -547,7 +619,7 @@ public abstract class MpdRead {
                     new Fixed(stream.readShort() << 16),
                     new Fixed(stream.readShort() << 16),
                     new Fixed(stream.readShort() << 16)
-            ));
+            ).toJson());
 
             item.addProperty("rotation", Arrays.asList(
                     new Angle(stream.readUnsignedShort()).getRadians(),
@@ -555,23 +627,22 @@ public abstract class MpdRead {
                     new Angle(stream.readUnsignedShort()).getRadians()
             ));
 
-            item.addProperty("scale", new Point(stream));
+            item.addProperty("scale", new Point(stream).toJson());
             meshNo++;
         }
-        // note: maybe the "stuff at offset 8" is terminated when the offset is 0x00000000
-        highlightGroups.addRange("stuff_at_offset_8", offset, (int) stream.getStreamPosition()-offset);
+        highlightGroups.addRange("header_objects", offset, (int) stream.getStreamPosition()-offset);
 
         // read mesh data
         for (Block block : stuff.valuesStream(Block.class).collect(Collectors.toList())) {
             int mesh_offset = block.getInt("offset");
             stream.seek(mesh_offset);
-            PolygonData polygonData = new PolygonData(stream, "mesh");
+            PolygonData polygonData = new PolygonData(stream);
             polygonData.readDetails2(stream, -MAP_MEMORY_OFFSET);
-            block.addBlock(polygonData);
-            highlightGroups.addRange("polygonData", mesh_offset, PolygonData.SIZE);
+            block.addProperty(("mesh_"+new HexValue(mesh_offset)), polygonData);
+            highlightGroups.addRange("polygon_data", mesh_offset, PolygonData.SIZE);
             highlightGroups.addRange("points", polygonData.getPointsOffset()-MAP_MEMORY_OFFSET, polygonData.getNumPoints()*Point.SIZE);
             highlightGroups.addRange("polygons", polygonData.getPolygonOffset()-MAP_MEMORY_OFFSET, polygonData.getNumPolygons()* Polygon.SIZE);
-            highlightGroups.addRange("polygonAttributes", polygonData.getPolygonAttributesOffset()-MAP_MEMORY_OFFSET, polygonData.getNumPolygons()*PolygonAttribute.SIZE);
+            highlightGroups.addRange("polygon_attributes", polygonData.getPolygonAttributesOffset()-MAP_MEMORY_OFFSET, polygonData.getNumPolygons()*PolygonAttribute.SIZE);
         }
         return stuff;
     }
@@ -585,7 +656,7 @@ public abstract class MpdRead {
             if (textureIndex == 0xffff) {
                 // no more animations
                 int pos = (int) stream.getStreamPosition();
-                highlightGroups.addRange("textureAnimations", offsetTextureAnimations, pos-offsetTextureAnimations);
+                highlightGroups.addRange("texture_animations", offsetTextureAnimations, pos-offsetTextureAnimations);
                 break;
             }
             TextureAnimation animation = new TextureAnimation(textureIndex,
@@ -669,37 +740,102 @@ public abstract class MpdRead {
         }
     }
 
-    private void readMapObjects(Block fileBlock, ImageInputStream stream, String file) throws IOException {
+    private void readMapObjects(HighlightGroups highlightGroups, Block fileBlock, ImageInputStream stream, String file) throws IOException {
         Block mapObjects = fileBlock.getBlock("chunk_directory").getBlock("mapObjects");
         int offset = mapObjects.getInt("relativeOffset");
-        int size = mapObjects.getInt("size");
         int relativeOffset = OFFSETS.getOrDefault(file, DEFAULT_OFFSET) - offset;
 
-        Block block = fileBlock.createBlock("map_objects", offset, size);
         try {
             stream.seek(offset);
-
-            block.addProperty("header_pointer1", new Pointer(stream, relativeOffset));
-            block.addProperty("header_pointer2", new Pointer(stream, relativeOffset));
-            block.addProperty("numObjects", new HexValue(stream.readShort()));
-            block.addProperty("header_zero", new HexValue(stream.readShort()));
-
-            Block models = block.createBlock("models", 0, 0);
-
-            List<ModelHead> heads = new ArrayList<>();
-            for (int i = 0; i < block.getInt("numObjects"); i++) {
-                ModelHead modelHead = new ModelHead(stream, "modelhead[" + i + "]", relativeOffset);
-                heads.add(modelHead);
-                models.addBlock(modelHead);
-            }
-            block.addProperty("end_offset", new HexValue((int) stream.getStreamPosition()));
-            // read polygon data structure for each model head
-            for (ModelHead head : heads) {
-                head.readData(stream);
-            }
+            fileBlock.addProperty("map_objects", new MapObjects(stream, relativeOffset, highlightGroups));
         } catch (Exception e) {
-            block.addProperty("cannot_read_models", Sf3Util.getExceptionLines(e).stream().map(line -> "\""+line+"\"").collect(Collectors.toList()));
+            fileBlock.addProperty("cannot_read_models", Sf3Util.getExceptionLines(e).stream().map(line -> "\""+line+"\"").collect(Collectors.toList()));
         }
+    }
+
+    private void readStuffAtObjectOffset2(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer2) throws IOException {
+        if (pointer2.getValue().getValue() == 0) {
+            return;
+        }
+        // read stuff at offset 2
+        stream.seek(pointer2.getRelativeOffset().getValue());
+        Block stuffAtOffset2 = block.createBlock("stuff_at_offset_2", pointer2.getRelativeOffset().getValue(), 0);
+        List<Integer> offsets = new ArrayList<>();
+        while (true) {
+            int offsetValue = stream.readInt();
+            if (offsetValue == -1) {
+                break;
+            }
+            offsets.add(offsetValue - relativeOffset);
+        }
+        stuffAtOffset2.addProperty("size", offsets.size());
+        Block offsetsBlock = stuffAtOffset2.createBlock("offsets", 0, 0);
+        int min = 0x7fff;
+        int max = 0;
+        // these values index into the list at stuff_at_offset_1.values_2
+        int offsetIndex = 0;
+        for (int singleOffset : offsets) {
+            stream.seek(singleOffset);
+            List<HexValue> values = new ArrayList<>();
+            while (true) {
+                int value = stream.readUnsignedShort();
+                if (value == 0xffff) {
+                    break;
+                }
+                min = Math.min(min, value);
+                max = Math.max(max, value);
+                values.add(new HexValue(value));
+            }
+            offsetsBlock.addProperty(new HexValue(offsetIndex).toString(), values.toString().replace('"',' '));
+            offsetIndex++;
+        }
+        highlightGroups.addRange("map_objects_stuff2", stuffAtOffset2.getStart(), (int) (stream.getStreamPosition() - stuffAtOffset2.getStart()));
+        stuffAtOffset2.addProperty("min", new HexValue(min));
+        stuffAtOffset2.addProperty("max", new HexValue(max));
+    }
+
+    private void readStuffAtObjectOffset1(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer1, Pointer pointer2) throws IOException {
+        // read stuff at offset 1
+        // maybe this is some kind of binary tree for visibility culling of the objects
+        // see bsp in doom (https://en.wikipedia.org/wiki/Binary_space_partitioning)
+
+        if (pointer1.getValue().getValue() == 0) {
+            return;
+        }
+        stream.seek(pointer1.getRelativeOffset().getValue());
+        int length = pointer2.getValue().getValue() - pointer1.getValue().getValue();
+        Block stuffAtOffset1 = block.createBlock("stuff_at_offset_1", pointer1.getRelativeOffset().getValue(), length);
+        Pointer offset1 = new Pointer(stream, relativeOffset);
+        Pointer offset2 = new Pointer(stream, relativeOffset);
+        stuffAtOffset1.addProperty("offset_1", offset1);
+        stuffAtOffset1.addProperty("offset_2", offset2);
+
+        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue(), offset1.getRelativeOffset().getValue());
+        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue()+4, offset2.getRelativeOffset().getValue());
+        stream.seek(offset1.getRelativeOffset().getValue());
+        int size1 = (offset2.getRelativeOffset().getValue() - offset1.getRelativeOffset().getValue()) / 4;
+        List<Object> values1 = new ArrayList<>();
+        // note: list seems to be terminated by 0xff
+        for (int i = 0; i < size1; i++) {
+            values1.add(new HexValue(stream.readInt()));
+        }
+        stuffAtOffset1.addProperty("count_1", values1.size());
+        stuffAtOffset1.addProperty("count_1_hex", new HexValue(values1.size()));
+        stuffAtOffset1.addProperty("values_1", values1);
+
+        stream.seek(offset2.getRelativeOffset().getValue());
+        int size2 = (pointer2.getRelativeOffset().getValue() - offset2.getRelativeOffset().getValue()) / 8;
+        List<Object> values2 = new ArrayList<>();
+
+        for (int i = 0; i < size2; i++) {
+            HexValue value1 = new HexValue(stream.readInt());
+            HexValue value2 = new HexValue(stream.readInt());
+            values2.add("\""+value1+" "+value2+"\"");
+        }
+        stuffAtOffset1.addProperty("count_2", values2.size());
+        stuffAtOffset1.addProperty("count_2_hex", new HexValue(values2.size()));
+        stuffAtOffset1.addProperty("values_2", values2);
+        highlightGroups.addRange("map_objects_stuff1", stuffAtOffset1.getStart(), stuffAtOffset1.getLength());
     }
 
     protected List<Integer> readPalette(HighlightGroups highlightGroups, ImageInputStream stream, int offset, int toOffset) throws IOException {
@@ -720,7 +856,7 @@ public abstract class MpdRead {
         return values;
     }
 
-    protected void dumpOtherChunks(Path path, Path destinationPath, Block file, ImageInputStream stream) throws IOException {
+    protected void dumpScrollPaneChunks(HighlightGroups highlightGroups, Path path, Path destinationPath, Block file, ImageInputStream stream) throws IOException {
         Block chunkDirectory = file.getBlock("chunk_directory");
         List<List<Integer>> palettes = file.getBlock("header").getObject("palettes");
         int i = 0;
@@ -728,6 +864,7 @@ public abstract class MpdRead {
             int offset = blockDescription.getInt("relativeOffset");
             int size = blockDescription.getInt("size");
             if (size > 0) {
+                highlightGroups.addRange("scroll_screens", offset, size);
                 // filename w/o extension. ".raw" and ".decompressed" will be appended
                 Path baseFilename = destinationPath.resolve(path.getFileName().toString() + ".other" + i);
                 byte[] bytes = decompressChunk(stream, offset, size, baseFilename);

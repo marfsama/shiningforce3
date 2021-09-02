@@ -15,6 +15,7 @@ import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.List;
+import java.util.Set;
 
 /** Draws a scaled image. */
 public class ImagePanel extends JPanel implements PropertyChangeListener {
@@ -70,13 +71,16 @@ public class ImagePanel extends JPanel implements PropertyChangeListener {
             g2d.drawImage(image, 0, 0, this);
             drawColumns((Graphics2D) g2d.create(), image.getWidth(), image.getHeight(), scale);
             if (highlightGroups != null && highlightGroups.getValue() != null) {
-                List<HighlightGroup> groups = (List<HighlightGroup>) highlightGroups.getValue();
+                GuiHighlights guiHighlights = (GuiHighlights) highlightGroups.getValue();
+                List<HighlightGroup> groups = guiHighlights.getHighlightGroups();
+                Set<String> enabledAreas = guiHighlights.getShowAreas();
                 for (HighlightGroup group : groups) {
                     Color color = new Color(group.getColor());
-                    group.getHighlights().forEach(
-                            highlight -> drawHighlight((Graphics2D) g2d.create(), image.getWidth(), image.getHeight(), scale, highlight.getStart() - offset, highlight.getEnd() - offset, color)
-                    );
-
+                    if (enabledAreas.contains(group.getName())) {
+                        group.getHighlights().forEach(
+                                highlight -> drawHighlight((Graphics2D) g2d.create(), image.getWidth(), image.getHeight(), scale, highlight.getStart() - offset, highlight.getEnd() - offset, color)
+                        );
+                    }
                     group.getPointers().forEach(
                             pointer -> drawArrow((Graphics2D) g2d.create(), image.getWidth(), image.getHeight(), scale, pointer.getStart() - offset, pointer.getDestination() - offset, color)
                     );
@@ -190,6 +194,7 @@ public class ImagePanel extends JPanel implements PropertyChangeListener {
 
     @Override
     public void propertyChange(PropertyChangeEvent evt) {
-        repaint();
+        SwingUtilities.invokeLater(this::repaint);
+        System.out.println(getClass().getSimpleName()+ " repaint "+evt.getPropertyName()+" "+evt.getNewValue().getClass());
     }
 }

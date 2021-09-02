@@ -17,10 +17,16 @@ import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
+import java.util.stream.Collectors;
 
 /** Change Settings. */
 public class SettingsPanel extends JPanel {
@@ -32,8 +38,10 @@ public class SettingsPanel extends JPanel {
 
     private void initializeComponents(PresentationModel<?> presentationModel) {
         FormLayout layout = new FormLayout(
-                "right:pref, 6dlu, 100dlu",  // columns
-                "pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref");           // rows
+                // columns
+                "right:pref, 6dlu, 100dlu",
+                // rows
+                "pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref");
 
         JSlider scaleSlider = createScaleSlider(presentationModel);
         JSlider textureWidthSlider = createTextureWidthSlider(presentationModel);
@@ -64,6 +72,10 @@ public class SettingsPanel extends JPanel {
 
         add(new JLabel("0x"),                  CC.xy(1, 13));
         add(offsetTextField,                        CC.xy(3, 13));
+
+        JScrollPane highlightGroupsPanel = new JScrollPane(new HighlightGroupsPanel(presentationModel)
+                , JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        add(highlightGroupsPanel, CC.xyw(1, 15, 3));
 
         this.fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -133,6 +145,14 @@ public class SettingsPanel extends JPanel {
         return textureWidthSlider;
     }
 
+    private int getOpenDialog() {
+        Properties settings = readSettings();
+        if (settings.containsKey("lastDir")) {
+            fileChooser.setCurrentDirectory(new File(settings.getProperty("lastDir")));
+        }
+        return fileChooser.showOpenDialog(SettingsPanel.this);
+    }
+
     private class OpenAction extends AbstractAction {
 
         private final ValueModel pathModel;
@@ -146,11 +166,12 @@ public class SettingsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent e) {
-            int result = fileChooser.showOpenDialog(SettingsPanel.this);
+            int result = getOpenDialog();
             if (result == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
-                pathModel.setValue(file.toPath());
-                highlightsModel.setValue(new ArrayList<HighlightGroup>());
+                writeSettings(file);
+                SwingUtilities.invokeLater(() -> pathModel.setValue(file.toPath()));
+                SwingUtilities.invokeLater(() -> highlightsModel.setValue(new GuiHighlights()));
             }
         }
     }
@@ -161,25 +182,57 @@ public class SettingsPanel extends JPanel {
         private final ValueModel pathModel;
 
         public OpenHighlightsAction(ValueModel highlightsModel, ValueModel pathModel) {
-            super("Open Highlights...");
+            super("Open with Highlights...");
             this.highlightsModel = highlightsModel;
             this.pathModel = pathModel;
         }
 
         @Override
         public void actionPerformed(ActionEvent e) {
-            int result = fileChooser.showOpenDialog(SettingsPanel.this);
+            int result = getOpenDialog();
             if (result == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
                 ObjectMapper mapper = new ObjectMapper();
                 try {
+                    writeSettings(file);
                     DataClass value = mapper.readValue(file, DataClass.class);
-                    highlightsModel.setValue(value.getHighlights());
-                    pathModel.setValue(Paths.get(value.getFilename()));
+                    GuiHighlights guiHighlights = new GuiHighlights(file.getAbsolutePath(), value.getHighlights());
+                    guiHighlights.getShowAreas().addAll(guiHighlights.getHighlightGroups().stream().map(HighlightGroup::getName).collect(Collectors.toList()));
+                    SwingUtilities.invokeLater(() -> highlightsModel.setValue(guiHighlights));
+                    SwingUtilities.invokeLater(() -> pathModel.setValue(Paths.get(value.getFilename())));
                 } catch (IOException ioException) {
                     ioException.printStackTrace();
                 }
             }
+        }
+    }
+
+    private Properties readSettings() {
+        Path configPath = Paths.get(System.getProperty("user.home")).resolve(".config/binaryview");
+        Path configFile = configPath.resolve("config.properties");
+        if (!Files.exists(configPath)) {
+            return new Properties();
+        }
+        try {
+            String propertiesString = Files.readString(configFile, StandardCharsets.UTF_8);
+            Properties properties = new Properties();
+            properties.load(new StringReader(propertiesString));
+            return properties;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new Properties();
+        }
+    }
+
+    private void writeSettings(File loadedFile) {
+        try {
+            String lastDir = loadedFile.toPath().getParent().toAbsolutePath().toString();
+            Path configPath = Paths.get(System.getProperty("user.home")).resolve(".config/binaryview");
+            Files.createDirectories(configPath);
+            Files.write(configPath.resolve("config.properties"),
+                    ("lastDir="+lastDir).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

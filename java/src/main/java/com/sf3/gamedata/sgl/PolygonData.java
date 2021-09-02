@@ -1,76 +1,68 @@
 package com.sf3.gamedata.sgl;
 
-import com.sf3.gamedata.utils.Block;
-import com.sf3.gamedata.utils.HexValue;
-import com.sf3.util.ByteArrayImageInputStream;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Getter;
 
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.ByteOrder;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * Polygon Data Structure extended by another pointer.
+ * Polygon Data Structure.
  *
  * @see "SGL Strucure Reference, page 3, PDATA"
  */
-public class PolygonData extends Block {
+@Getter
+public class PolygonData {
 
     public static final int SIZE = 20; // 0x14
 
     private final int numPoints;
-    private final int pointsOffset;
-    private List<Point> points;
-
     private final int numPolygons;
-    private final int polygonOffset;
-    private List<Polygon> polygons;
 
+    @JsonIgnore
+    private final int pointsOffset;
+    @JsonIgnore
+    private final int polygonOffset;
+    @JsonIgnore
     private final int polygonAttributesOffset;
+
+
+    private List<Point> points;
+    private List<Polygon> polygons;
     private List<PolygonAttribute> polygonAttributes;
 
-    public PolygonData(ImageInputStream stream, String name) throws IOException {
-        this(stream, name, SIZE);
-    }
-
-    protected PolygonData(ImageInputStream stream, String name, int size) throws IOException {
-        super(name, (int) stream.getStreamPosition(), size);
+    public PolygonData(ImageInputStream stream) throws IOException {
         this.pointsOffset = stream.readInt();
         this.numPoints = stream.readInt();
         this.polygonOffset = stream.readInt();
         this.numPolygons = stream.readInt();
         this.polygonAttributesOffset = stream.readInt();
-
-        addProperty("pointsOffset", new HexValue(pointsOffset));
-        addProperty("numPoints", numPoints);
-        addProperty("polygonOffset", new HexValue(polygonOffset));
-        addProperty("numPolygons", numPolygons);
-        addProperty("polygonAttributesOffset", new HexValue(polygonAttributesOffset));
     }
 
     public void readDetails2(ImageInputStream stream, int chunkStart) throws IOException {
-        stream.seek(pointsOffset + chunkStart);
+        stream.seek((long) pointsOffset + chunkStart);
         this.points = IntStream.range(0, numPoints).mapToObj(t -> readPoint(stream)).collect(Collectors.toList());
 
-        stream.seek(polygonOffset + chunkStart);
+        stream.seek((long) polygonOffset + chunkStart);
         this.polygons = IntStream.range(0, numPolygons).mapToObj(t -> readPolygon(stream)).collect(Collectors.toList());
 
-        stream.seek(polygonAttributesOffset + chunkStart);
+        stream.seek((long) polygonAttributesOffset + chunkStart);
         this.polygonAttributes = IntStream.range(0, numPolygons).mapToObj(t -> readPolygonAttribute(stream)).collect(Collectors.toList());
     }
 
-    public void readDetails(ImageInputStream stream, int offset_after_header) throws IOException {
+    public void readDetails(ImageInputStream stream, int offsetAfterHeader) throws IOException {
         // read Points
-        stream.seek(pointsOffset - offset_after_header);
+        stream.seek((long) pointsOffset - offsetAfterHeader);
         this.points = IntStream.range(0, numPoints).mapToObj(t -> readPoint(stream)).collect(Collectors.toList());
 
-        stream.seek(polygonOffset - offset_after_header);
+        stream.seek((long) polygonOffset - offsetAfterHeader);
         this.polygons = IntStream.range(0, numPolygons).mapToObj(t -> readPolygon(stream)).collect(Collectors.toList());
 
-        stream.seek(polygonAttributesOffset - offset_after_header);
+        stream.seek((long) polygonAttributesOffset - offsetAfterHeader);
         this.polygonAttributes = IntStream.range(0, numPolygons).mapToObj(t -> readPolygonAttribute(stream)).collect(Collectors.toList());
     }
 
@@ -100,38 +92,6 @@ public class PolygonData extends Block {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    public List<Point> getPoints() {
-        return points;
-    }
-
-    public List<PolygonAttribute> getPolygonAttributes() {
-        return polygonAttributes;
-    }
-
-    public List<Polygon> getPolygons() {
-        return polygons;
-    }
-
-    public int getPointsOffset() {
-        return pointsOffset;
-    }
-
-    public int getNumPoints() {
-        return numPoints;
-    }
-
-    public int getPolygonOffset() {
-        return polygonOffset;
-    }
-
-    public int getNumPolygons() {
-        return numPolygons;
-    }
-
-    public int getPolygonAttributesOffset() {
-        return polygonAttributesOffset;
     }
 
     @Override

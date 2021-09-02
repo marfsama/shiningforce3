@@ -15,11 +15,9 @@ public class PolygonDataExtended extends PolygonData {
 
     private final int vertexNormalsOffset;
 
-    public PolygonDataExtended(ImageInputStream stream, String name) throws IOException {
-        super(stream, name, SIZE);
+    public PolygonDataExtended(ImageInputStream stream) throws IOException {
+        super(stream);
         this.vertexNormalsOffset = stream.readInt();
-        // 6 bytes for each point. another vector?
-        addProperty("vertexNormalsOffset", new HexValue(vertexNormalsOffset));
     }
 
 

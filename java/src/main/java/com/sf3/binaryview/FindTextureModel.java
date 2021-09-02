@@ -1,6 +1,7 @@
 package com.sf3.binaryview;
 
 import com.jgoodies.binding.beans.Model;
+import com.sf3.util.GuiHighlights;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -41,7 +42,7 @@ public class FindTextureModel extends Model {
     /** Offset in file where to start the image. */
     private int fileOffset;
     /** List of highlights. */
-    private List<HighlightGroup> highlightGroups;
+    private GuiHighlights highlightGroups;
 
 
     public Path getPath() {
@@ -137,13 +138,14 @@ public class FindTextureModel extends Model {
         firePropertyChange(FILE_OFFSET, old, fileOffset);
     }
 
-    public List<HighlightGroup> getHighlightGroups() {
+    public GuiHighlights getHighlightGroups() {
         return highlightGroups;
     }
 
-    public void setHighlightGroups(List<HighlightGroup> highlightGroups) {
-        List<HighlightGroup> old = this.highlightGroups;
+    public void setHighlightGroups(GuiHighlights highlightGroups) {
+        GuiHighlights old = this.highlightGroups;
         this.highlightGroups = highlightGroups;
-        firePropertyChange(HIGHLIGHT_GROUPS, old, fileOffset);
+        firePropertyChange(HIGHLIGHT_GROUPS, old, highlightGroups);
+        System.out.println(getClass().getSimpleName()+": setHighlightGroups()");
     }
 }

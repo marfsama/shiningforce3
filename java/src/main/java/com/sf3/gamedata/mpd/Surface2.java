@@ -7,6 +7,7 @@ import javax.imageio.stream.ImageInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 
 public class Surface2 {
     private int width = 64;
@@ -43,12 +44,12 @@ public class Surface2 {
         return unknown2.get(y * width + x);
     }
 
-    private List<String> listToString(BiFunction<Integer, Integer, Integer> valueFunction) {
+    private List<String> listToString(BinaryOperator<Integer> valueFunction) {
         List<String> heights = new ArrayList<>();
         for (int y = 0; y < height; y++) {
-            List<Integer> heightLine = new ArrayList<>();
+            List<String> heightLine = new ArrayList<>();
             for (int x = 0; x < width; x++) {
-                heightLine.add((valueFunction.apply(x,y)));
+                heightLine.add((valueFunction.apply(x,y)).toString());
             }
             heights.add("\""+heightLine+"\"");
         }

@@ -1,6 +1,8 @@
 package com.sf3.gamedata.utils;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -35,14 +37,19 @@ public class Block {
         getProperties().put(block.getName(), block);
     }
 
+    public Block createBlock(String name) {
+        return createBlock(name, 0, 0);
+    }
+
     public Block createBlock(String name, int start, int length) {
         Block block = new Block(name, start, length);
         addBlock(block);
         return block;
     }
 
-    public void addProperty(String name, Object object) {
+    public <E> E addProperty(String name, E object) {
         getProperties().put(name, object);
+        return object;
     }
 
     public Map<String, Object> getProperties() {
@@ -86,7 +93,22 @@ public class Block {
         throw new IllegalStateException("Property "+name+" is not a block, but a "+value.getClass()+" :"+value);
     }
 
-    public <E> E  getObject(String name) {
+    public <E> E  getObject(String ... path) {
+        return getObject(Arrays.asList(path));
+    }
+
+    public <E> E  getObject(List<String> path) {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException("path is null or empty");
+        }
+        if (path.size() == 1) {
+            return this.getObject(path.get(0));
+        }
+        Block block = getBlock(path.get(0));
+        return block.<E>getObject(path.subList(1, path.size()));
+    }
+
+        public <E> E  getObject(String name) {
         Object value = getProperties().get(name);
         if (value == null) {
             // try again with underscore

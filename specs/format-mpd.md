@@ -73,12 +73,12 @@ This is the header.
 |  0x18   | offset_texture_groups | int32 |  1   | Offset to list of texture groups. See (#texture-groups)
 |  0x1C   | offset6   | int32 |  1   | Pointer to unknown list. 
 |  0x20   | offset7   | int32 |  1   | Pointer to unknown list.
-|  0x24   | offset_mesh_1 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null. 
-|  0x28   | offset_mesh_2 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null.
-|  0x2C   | offset_mesh_3 | int32 |  1   | Pointer to list of 2 moveable/interactable mesh. may be null.
+|  0x24   | offset_mesh_1 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null. 
+|  0x28   | offset_mesh_2 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
+|  0x2C   | offset_mesh_3 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
 |  0x30   | const_1   | int32 |  1   | Const 0x8000b334
 |  0x34   | const_2   | int32 |  1   | Const 0x4ccc0000
-|  0x38   | offset11  | int32 |  1   | Sometimes pointer to list small uint16, the list end is marked by 0xffff. May be null. 
+|  0x38   | offset_texture_anim_alternative  | int32 |  1   | Pointer to a list of texture indices. These textures are the same images as the "real" texture animations, but these textures are from the normal texture block (and doesn't seems to be used). See (#texture-animation-alternatives) 
 |  0x3C   | offset_pal_1  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
 |  0x40   | offset_pal_2  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
 |  0x44   | unknown_5 | int32 |  1   | Unknown small value, may be negative.
@@ -139,7 +139,7 @@ The end of the texture group list is marked by 0xffff (texture_group = 0xffff).
 
 Size: 4 bytes
 
-List of textures in the animation. The offsets points into the
+List of textures in the animation. The offsets point into the
 *compressed* data, only one texture image is compressed in this entry.
 The end of the list is marked by an offset of 0xfffe.
 
@@ -149,7 +149,7 @@ The end of the list is marked by an offset of 0xfffe.
 | 0x02   | unknown | int16  |   1   | unknown small value
 
 
-## Moveable or interactible objects
+## Movable or interactible objects
 
 Size: 0x1c (28) bytes
 
@@ -163,6 +163,15 @@ Sometimes the data is in the file, but the pointer in the header is null, so it 
 | 0x04   | position          | int16 |   3   | Integer part of the position. Decimal part is 0x0000
 | 0x0A   | rotation          | ANGLE |   1   | Rotation of the mesh.
 | 0x10   | scale             | FIXED |   3   | Scale of the mesh.
+
+
+## Texture animation alternatives
+
+This 16-bit integers in this list are texture indices, the end of the list is marked by 0xffff. The referenced textures
+images are similar to the ones which are in the [texture animation images](#texture-animation-images) chunk, but these
+textures are from the "normal" [texture chunk](#texture-chunk).
+The image indices are in one list without a separator, so it is not visible which image belongs to which texture group.
+It is unknown how this knowledge can be obtained, or what purpose this list and the alternative texture images have.
 
 # Chunks
 
@@ -178,16 +187,16 @@ The chunks are always in the same order, but not all files need all chunk types.
 |    4        | empty_2                  | This chunk always seem to be empty (size 0).
 |    5        | surface_meshes           | Heightmap for each surface tile and some unknown surface attributes. Might be walkmesh and movement costs. The chunk is compressed.
 |  6 - 10     | textures                 | Texture images. The chunks are compressed.
-| 11 - 13     | object_textures          | Textures for moveable objects (see [Header](#header)). The chunks are compressed.
+| 11 - 13     | object_textures          | Textures for movable objects (see [Header](#header)). The chunks are compressed.
 | 14 - 19     | scroll_panes             | Memory blocks for scroll panes (skybox) and rotating scrolls (ground). The chunks are compressed.
 
 ## Compressed Streams
 
 Some Chunks use some kind of LZ77 compression.
 
-The chunk is divided in "lines", which consists of a int16 "control" and
+The chunk is divided in "lines", which consists of an int16 "control" and
 16 int16s data. One bit in control corresponds to one int16 of the data,
-starting with msb of control. Cleared bit in control means "data int16",
+starting with the msb of control. Cleared bit in control means "data int16",
 set bit in control means "command int16".
 
 ## Chunk Table
@@ -236,7 +245,7 @@ The chunk consists of the header with the mesh list and the PDATA structures. Th
 list of POINTs, list of POLYGONs and list of polygon ATTRs. After the PDATA structure there are two unknown list of 
 stuff. 
 
-## Header
+## Mesh header
 
 | Offset | Name         | Type      | Count       | Description
 |--------|--------------|-----------|-------------|-----------------------------
@@ -244,7 +253,7 @@ stuff.
 | 0x04   | offset2      | int32     |   1         | offset to unknown stuff. see (#static-objects-offset2). May be null.
 | 0x08   | num_meshes   | int16      |   1         | number of objects
 | 0x0A   |              | int16      |   1         | padding, 0x00
-| 0x0C   | meshes[]     | Mesh[]    | num_meshes  | for each mesh a [Mesh](#model-head) structure.    
+| 0x0C   | meshes[]     | Mesh[]    | num_meshes  | for each mesh a [Mesh](#mesh) structure.    
 
 
 ## Mesh
@@ -272,7 +281,7 @@ Note: for PDATA see SGL Reference.
 | 0x04   | offset2  | int32  |   1   | offset to list of two ints each. size seems to be the same the list at offset1
 
 Note:
-In the list behind offset 2 the first int contains strictly ascending values in the first 16 bits and the last 16 bits.
+In the list behind offset2 the first int contains strictly ascending values in the first 16 bits and the last 16 bits.
 
 Example sara06.json:
 
@@ -347,7 +356,7 @@ List of shorts:
 | Offset | Name       | Type   | Count | Description
 |--------|------------|--------|-------|-----------------------------
 | 0x00   | value      | int16  |  ?    | small unknown short
-| ??     | end_marker | int16  |  1    | 0xFFFF. Denotes end of list.
+| ??     | end_marker | int16  |  1    | 0xFFFF. Marks the end of list.
 
 
 These list form some kind of triangles (see example). A very wild guess might be some kind of 
@@ -651,8 +660,8 @@ In the unknown Attribute stuff the blocks are 5x5 each and each element is a sin
 
 # Texture Animation Images
 
-When the header has some animated textures, the corresponding images are here. The header points directly to a single 
-image (character) into this chunk, which is compressed individually. The position and number of images in the chunk
+When the header has some animated textures, the corresponding images are in this chunk. The header points directly to a
+single image (character) into this chunk, which is compressed individually. The position and number of images in the chunk
 can only be determined from the header.
 
 
@@ -723,7 +732,7 @@ transformation applied. It can be viewed as a single huge quadratic polygon. Mos
 the ground texture. Note that there can be only one rotating scroll pane. For further details see [1].
 
 The scroll pane content of both types can be supplied in two formats: cell format and bitmap format.
-The bitmap format is simply the pixels row major order, either rgb16 or paletted format. In SF3 only the 256 colors 
+The bitmap format is simply the pixels row major order, either rgb16 or palette format. In SF3 only the 256 colors 
 palette format is used.
 The cell format places character images in a repeating pattern to form a very big image. The exact format is described 
 in [1].

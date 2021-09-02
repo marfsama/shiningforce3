@@ -18,7 +18,7 @@ public class Surface {
     /** List of 16x16 Tiles with character texture ids. Each tile is 5x5. */
     private List<Tile<Point>> vertexNormals = new ArrayList<>();
     /** List of 16x16 Tiles with an unknown byte. Each tile is 5x5. */
-    private List<Tile<Integer>> unknown = new ArrayList<>();
+    private List<Tile<Integer>> walkmeshHeights = new ArrayList<>();
 
     public Surface(ImageInputStream stream) {
         for (int i = 0; i < 16*16; i++) {
@@ -28,7 +28,7 @@ public class Surface {
             vertexNormals.add(readTile(stream, 5, 5, this::readNormal));
         }
         for (int i = 0; i < 16*16; i++) {
-            unknown.add(readTile(stream, 5, 5, Sf3Util::readUnsignedByte));
+            walkmeshHeights.add(readTile(stream, 5, 5, Sf3Util::readUnsignedByte));
         }
     }
 
@@ -56,12 +56,20 @@ public class Surface {
         return getCharacterTile(x / 4, y / 4).get(x % 4, y % 4);
     }
 
-    public Tile<Integer> getUnknownTile(int x, int y) {
-        return unknown.get(width * y + x);
+    public Tile<Integer> getWalkmeshTile(int x, int y) {
+        return walkmeshHeights.get(width * y + x);
     }
 
-    public Integer getUnknown(int x, int y) {
-        return getUnknownTile(x / 5, y / 5).get(x % 5, y % 5);
+    public Integer getWalkmeshHeight(int x, int y) {
+        return getWalkmeshTile(x / 5, y / 5).get(x % 5, y % 5);
+    }
+
+    public Tile<Point> getVertexNormalTile(int x, int y) {
+        return vertexNormals.get(width * y + x);
+    }
+
+    public Point getVertexNormal(int x, int y) {
+        return getVertexNormalTile(x / 5, y / 5).get(x % 5, y % 5);
     }
 
     @Override
@@ -75,17 +83,29 @@ public class Surface {
             characters.add("\""+characterLine+"\"");
         }
         // skip surface normals
-        List<String> unknown = new ArrayList<>();
+        List<String> vertexNormals = new ArrayList<>();
         for (int y = 0; y < height*5; y++) {
-            List<Integer> unknownLine = new ArrayList<>();
+            List<String> vertexNormalLine = new ArrayList<>();
             for (int x = 0; x < width*5; x++) {
-                unknownLine.add(getUnknown(x,y));
+                Point vertexNormal = getVertexNormal(x, y);
+                vertexNormalLine.add("["+vertexNormal.getX()+","+vertexNormal.getY()+","+vertexNormal.getZ()+"]");
             }
-            unknown.add("\""+unknownLine+"\"");
+            vertexNormals.add("\""+vertexNormalLine+"\"");
+        }
+        // dump unknown stuff
+        List<String> walkmeshHeights = new ArrayList<>();
+        for (int y = 0; y < height*5; y++) {
+            List<Integer> walkmeshLine = new ArrayList<>();
+            for (int x = 0; x < width*5; x++) {
+                walkmeshLine.add(getWalkmeshHeight(x,y));
+            }
+            walkmeshHeights.add("\""+walkmeshLine+"\"");
         }
         return "{\"characters\": " +
                 "["+String.join(", ", characters)+"]," +
-                "\"unknown\":"+
-                "["+String.join(", ", unknown)+"]}";
+                "\"vertex_normals\":"+
+                "["+String.join(", ", vertexNormals)+"]," +
+                "\"walkmesh_heights\":"+
+                "["+String.join(", ", walkmeshHeights)+"]}";
     }
 }

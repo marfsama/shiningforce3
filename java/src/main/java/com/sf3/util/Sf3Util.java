@@ -22,10 +22,20 @@ public class Sf3Util {
 
     /** converts 16 bit rgb (saturn bgr555) to 8 bits each channel (rgb888). */
     public static int rgb16ToRgb24(int value) {
+        // when all bits are 0 then the pixel is transparent
+        // @see ST-013-R3-061694 VDP1 User Manual page 22
+        if (value == 0) {
+            return 0;
+        }
+        // when all bits are 1 then the pixel is the end code. make these transparent too
+        // @see ST-013-R3-061694 VDP1 User Manual page 86
+        if (value == 0x7fff) {
+            return 0;
+        }
         int r = (value & 0x1f) << 3;
         int g = ((value >> 5) & 0x1f) << 3;
         int b = ((value >> 10) & 0x1f) << 3;
-        return (r << 16) + (g << 8) + b;
+        return (0xff << 24)  + (r << 16) + (g << 8) + b;
     }
 
     /** converts 24 bit rgb (rgb888) to saturn 16bit (bgr555). */
@@ -43,7 +53,7 @@ public class Sf3Util {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int value = imageStream.readUnsignedShort();
-                int color = (value == 0) ? 0 : Sf3Util.rgb16ToRgb24(value) + COLOR_OPAQUE;
+                int color = Sf3Util.rgb16ToRgb24(value);
                 image.setRGB(x, y, color);
             }
         }
@@ -105,7 +115,7 @@ public class Sf3Util {
 
         int totalWidth = textureColumns.stream().map(TextureColumn::getMaxWidth).mapToInt(Integer::valueOf).sum();
 
-        BufferedImage image = new BufferedImage(totalWidth + additionalColumns * solidColorsSize, maxHeight, BufferedImage.TYPE_INT_RGB);
+        BufferedImage image = new BufferedImage(totalWidth + additionalColumns * solidColorsSize, maxHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics graphics = image.getGraphics();
         graphics.setColor(Color.WHITE);
         int textureIndex = 0;
@@ -118,7 +128,7 @@ public class Sf3Util {
             for (BufferedImage texture : column.getImages()) {
                 graphics.drawImage(texture, x,y, null);
                 uvs.add(new TextureUv (1.0f * x / image.getWidth(), 1.0f * y / image.getHeight(),
-                        (1.0f * x + texture.getWidth()) / image.getWidth(), (1.0f * y + texture.getHeight()) / image.getHeight()));
+                        (1.0f * x + texture.getWidth()-1) / image.getWidth(), (1.0f * y + texture.getHeight()-1) / image.getHeight()));
                 if (annotate) {
                     graphics.drawRect(x, y, texture.getWidth(), texture.getHeight());
                     if (textureIndexStart >= 0) {

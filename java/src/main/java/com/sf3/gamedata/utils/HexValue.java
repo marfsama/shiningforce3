@@ -1,8 +1,12 @@
 package com.sf3.gamedata.utils;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.sf3.gamedata.mpd.serializer.HexValueSerializer;
+
 import java.util.Objects;
 
 /** Wrapper around an integer to print these as hex. */
+@JsonSerialize(using = HexValueSerializer.class)
 public class HexValue implements Comparable<HexValue> {
     private final int value;
 

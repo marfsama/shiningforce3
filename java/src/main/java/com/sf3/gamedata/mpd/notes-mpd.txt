@@ -1,14 +1,9 @@
 Notes:
-* "other" chunks seems to be scoll pane images
-* most often the images are 512x128 palette indexed images (bit map format)
-* in sara02 the chunks contains 8x8 cells and one chunk (chunk index 2) seems to be pattern name table (see page 83)
 * the "value" fields in the header must encode:
   * offset where to place the palettes in color ram
   * character control register (2 x 16 bits) configuring the scroll backgrounds
   * Pattern Name Control Register (page 94), 16 bits for each used background
   * maybe there is a list where the character (texture) data should be placed in VRAM
-* rotation scroll screen is used to display ground texture.
-  => "surface_tiles" might be the pattern name table for the ground scroll screen.
 
 
 bochi.mpd (vandal home)
@@ -233,37 +228,283 @@ Priority 7 = 0
 Color Offset A Enabled
 R = 0, G = 0, B = 0
 
+typedef struct rdat{
+ 0    FIXED	XST ;		/* スクリーン画面スタート座標 Ｘst */
+ 4    FIXED	YST ;		/* スクリーン画面スタート座標 Ｙst */
+ 8    FIXED	ZST ;		/* スクリーン画面スタート座標 Ｚst */
+ C    FIXED	DXST ;		/* スクリーン画面垂直方向座標増分 ｄＸst */
+10    FIXED	DYST ;		/* スクリーン画面垂直方向座標増分 ｄＹst */
+14    FIXED	DX ;		/* スクリーン画面水平方向座標増分 ｄＸ */
+18    FIXED	DY ;		/* スクリーン画面水平方向座標増分 ｄＹ */
+1C    FIXED	MATA ;		/* 回転マトリクスパラメータＡ */
+20    FIXED	MATB ;		/* 回転マトリクスパラメータＢ */
+24    FIXED	MATC ;		/* 回転マトリクスパラメータＣ */
+28    FIXED	MATD ;		/* 回転マトリクスパラメータＤ */
+2C    FIXED	MATE ;		/* 回転マトリクスパラメータＥ */
+30    FIXED	MATF ;		/* 回転マトリクスパラメータＦ */
+
+34    Sint16	PX ;		/* 視点座標 Ｐx */
+36    Sint16	PY ;		/* 視点座標 Ｐy */
+38    Sint16	PZ ;		/* 視点座標 Ｐz */
+3A    Sint16	dummy0 ;
+3C    Sint16	CX ;		/* 中心座標 Ｃx */
+3E    Sint16	CY ;		/* 中心座標 Ｃy */
+40    Sint16	CZ ;		/* 中心座標 Ｃz */
+42    Sint16	dummy1 ;
+
+44    FIXED	MX ;		/* 平行移動量 Ｍx */
+48    FIXED	MY ;		/* 平行移動量 Ｍy */
+4C    FIXED	KX ;		/* 拡大縮小係数 kx */
+50    FIXED	KY ;		/* 拡大縮小係数 ky */
+
+54    Uint32	KAST ;		/* 係数テーブルスタートアドレス ＫＡst */
+58    Sint32	DKAST ;		/* 係数テーブル垂直方向アドレス増分 ＫＡst */
+5C    Sint32	DKA ;		/* 係数テーブル水平方向アドレス増分 ＫＡ */
+60
+} ROTSCROLL ;
 
 
-cannot decode file hrnaka: java.io.EOFException
-cannot decode file hrrail: java.io.EOFException
-cannot decode file inka00: java.io.EOFException
-cannot decode file jousai: pos < flushedPos!
-cannot decode file mgma00: java.io.EOFException
-cannot decode file mgma01: java.io.EOFException
-cannot decode file muhasi: java.io.EOFException
-cannot decode file point: java.io.EOFException
-cannot decode file sara05: java.io.EOFException
-cannot decode file shief1: java.io.EOFException
-cannot decode file shief2: java.io.EOFException
-cannot decode file shief3: java.io.EOFException
-cannot decode file shief4: java.io.EOFException
-cannot decode file shief5: java.io.EOFException
-cannot decode file shio00: java.io.EOFException
-cannot decode file tnka00: java.io.EOFException
-cannot decode file tomt00: java.io.EOFException
-cannot decode file toue00: java.io.EOFException
-cannot decode file tree00: java.io.EOFException
-cannot decode file turi00: java.io.EOFException
-cannot decode file turi01: java.io.EOFException
-cannot decode file yaka2: java.io.EOFException
-cannot decode file yaka3: java.io.EOFException
-cannot decode file yaka4: java.io.EOFException
-cannot decode file zlv1: java.io.EOFException
-cannot decode file zlv2: java.io.EOFException
-cannot decode file zlv3: java.io.EOFException
-cannot decode file zlv4: java.io.EOFException
-cannot decode file zoku00: java.io.EOFException
 
 
-cannot decode file ship2: pos < flushedPos! 0x3528 (first PDATA @bca0 (points to 25bd40), 0x253488
+| name   | a_rm01     | ascasl     | sara02     | sara04     | sara06     | btl02      |
+|--------|------------|------------|------------|------------|------------|------------|
+| chunk0 | cells_0    | cells_0    | cells_0    | cells_0    | bitmap_0   | bitmap_0   |
+| chunk1 | cells_0    | cells_0    | cells_0    | cells_0    | bitmap_0   | bitmap_0   |
+| chunk2 | data table | data table | data table | data table | -          | -          |
+| chunk3 | -          |            |            |            | unknown FC | unknown FC |
+| chunk4 | -          |            |            |            | bitmap_1   | bitmap_1   |
+| chunk5 | data table | data table | data table | data table | -          | -          |
+| offset1| 0xa224 6167 | 0xa224 6167 | 0xa224 6167 | 0xa224 6167 | 0x888d f568 | 0x9970 25bf |
+
+0xa2246167
+0xa2246167
+0xa2246167
+0xa2246167
+0x888df568
+0x997025bf
+
+CHCTLA (180028H)
+|  Bits | description | value   |
+|-------|-------------|---------|
+| 15,14 | unused
+| 13,12 | N1CHCN Colors NBG1 | 01 (256 colors)
+| 11,10 | N1BMSZ Bitmap Size NBG1 | ??
+|     9 | N1BMEN Bit map enable bit NBG1
+|     8 | N1CHSZ Character size NBG1 | 0 (1x1)
+|     7 | unused
+| 6,5,4 | N0CHCN Colors NBG0 | 001 (256 colors)
+|   3,2 | N0BMSZ Bitmap Size NBG0 | ??
+|     1 | N0BMEN Bit map enable bit NBG0
+|     0 | N0CHSZ Character size NBG0 | 0 (1x1)
+
+CHCTLB (18002AH)
+|   Bits   | description | value   |
+|----------|-------------|---------|
+|       15 | unused
+| 14,13,12 | R0CHCN Colors RBG0 | 001 (256 colors)
+|       11 | unused
+|       10 | R0BMSZ Bitmap Size RBG0 | ?? 0 (512 x 256) (real image is 512x128)
+|        9 | R0BMEN Bit map enable bit RBG0
+|        8 | R0CHSZ Character size RBG0 | 0 (1x1)
+|      7,6 | unused
+|        5 | N3CHCN Colors NBG3 | 1 (256 colors)
+|        4 | N3CHSZ Character size NBG3 | 0 (1x1)
+|      3,2 | unused
+|        1 | N2CHCN Colors NBG2 | 1 (256 colors)
+|        0 | N2CHSZ Character size NBG2 | 0 (1x1)
+
+* Note: see map offset register (page 104)
+  (boundary address value of the bit map pattern) = (map offset register value 3 bit) x
+  20000H.
+* Rotation Scroll Surface Map Register (page 107)
+  16-bit register, with addresses located at 180050H to 18006EH (0x10 * 16 bits)
+* Among image data, the RBG1 pattern name table is stored in VRAM-B1, and character pattern table is stored
+  in VRAM-B0. (page 166)
+
+
+Using Parameter A
+Coefficient Table Enabled(Mode 0)
+
+8-bit(256 colors)
+Tile(1H x 1V)
+Plane Size = 1H x 1V
+Pattern Name data size = 1 word
+Character Number Supplement bit = 0
+Special Priority bit = 0
+Special Color Calculation bit = 0
+Supplementary Palette number = 0
+Supplementary Color number = 0
+Plane A Address = 00060000
+Plane B Address = 00060000
+Plane C Address = 00060000
+Plane D Address = 00060000
+Plane E Address = 00060000
+Plane F Address = 00060000
+Plane G Address = 00060000
+Plane H Address = 00060000
+Plane I Address = 00060000
+Plane J Address = 00060000
+Plane K Address = 00060000
+Plane L Address = 00060000
+Plane M Address = 00060000
+Plane N Address = 00060000
+Plane O Address = 00060000
+Plane P Address = 00060000
+Window W1 Enabled:
+Horizontal start = 0
+Vertical start = 8
+Horizontal end = 319
+Vertical end = 231
+Display inside of Window
+Window Overlap Logic: OR
+Color Ram Address Offset = 0
+Priority = 1
+Color Calculation Enabled
+Extended Color Calculation Enabled
+Color Calculation Ratio = 31:1
+Color Offset A Enabled
+R = 0, G = 0, B = 0
+Special Color Calculation 3
+
+
+| File   | header_short[0] | header_short[1] | header_value_01 | header_value_02 | unknown_angle | header_value_05 | header_value_06 | header_value_05a | header_value_05b | header_value_06a | header_value_06b |
+|--------|-----------------|-----------------|-----------------|-----------------|---------------|-----------------|-----------------|------------------|------------------|------------------|------------------|
+| a_rm01 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| a_rm02 | 0x1103          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| as_oku | 0x2103          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x58            | -40.0000        | 0                | 88               | -40              | 0                |
+| ascasl | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| baka   | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| baka2  | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| bakain | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| bal_1  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_2  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_3  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0xffa00000      | 390.0000        | -96              | 0                | 390              | 0                |
+| bal_4  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_5  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_6  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_7  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_8  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| bal_9  | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| balsa  | 0x1103          | 0x50            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| black  | 0x153           | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| bochi  | 0x2703          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| bochim | 0x2703          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl019 | 0x2707          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl02  | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl03  | 0x2307          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl04a | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl06  | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl12  | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl13  | 0xa707          | 0x76            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl17  | 0x2707          | 0x76            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl19  | 0xa707          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl21  | 0x2707          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl24  | 0x2707          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| btl26  | 0xa707          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| chou00 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| dam    | 0xa703          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| eki    | 0x1103          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| fed06  | 0x1307          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| field  | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| furain | 0x2303          | 0x40            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| furin2 | 0x1103          | 0x50            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| gdi    | 0x2703          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| gdi4   | 0x1103          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| gdi5   | 0x2703          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| gdi6   | 0x1103          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| heya1  | 0x1103          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| heya2  | 0x1103          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| hnsn00 | 0xa783          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| home   | 0x1103          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| honjin | 0x1103          | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| hrnaka | 0x2303          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| hrrail | 0x2303          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| inka00 | 0x2303          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| jousai | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| maro2  | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| maroin | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| mary   | 0x1103          | 0x30            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| mgma00 | 0x2703          | 0x90            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffc00000      | 338.0000        | -64              | 0                | 338              | 0                |
+| mgma01 | 0x2703          | 0x90            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| mubar  | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| muchur | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| muhasi | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| my_btl | 0xa703          | 0x30            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| my_rm  | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| nasu00 | 0xf03           | 0x90            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| oba_in | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| obake  | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| obaken | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| obroom | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| obu    | 0x1103          | 0x50            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| point  | 0x2707          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xff380000      | 390.0000        | -200             | 0                | 390              | 0                |
+| rail1  | 0x1103          | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| rino   | 0x1103          | 0x50            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| rinoin | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| s_rm01 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| s_rm02 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| s_rm03 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| sara02 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| sara03 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| sara04 | 0x1103          | 0x38            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| sara05 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| sara06 | 0xa703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shief1 | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shief2 | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shief3 | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shief4 | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shief5 | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| shio00 | 0x2703          | 0x90            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| stri   | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| striin | 0x1103          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| tanida | 0x503           | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 0.0000          | 0                | 0                | 0                | 0                |
+| tesmap | 0x303           | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| tnka00 | 0xf03           | 0x80            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| tomt00 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| tori00 | 0xf03           | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| toue00 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| tree00 | 0x2703          | 0x90            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| turi00 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| turi01 | 0x2703          | 0x60            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0xffe00000      | 338.0000        | -32              | 0                | 338              | 0                |
+| void   | 0x103           | 0x48            | 0x8000b334      | 0x4ccc0000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| yaka2  | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| yaka3  | 0x303           | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| yaka4  | 0x303           | 0x60            | 0x8000c000      | 0x40000000      | 0xc000 270.0ｰ | 0x0             | 390.0000        | 0                | 0                | 390              | 0                |
+| yakata | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| z_as   | 0xa783          | 0x50            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| zlv1   | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| zlv2   | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| zlv3   | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| zlv4   | 0x2303          | 0x60            | 0x8000bbbc      | 0x44440000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+| zoku00 | 0x2303          | 0x60            | 0x8000a7d3      | 0x582d0000      | 0xc000 270.0ｰ | 0x0             | 338.0000        | 0                | 0                | 338              | 0                |
+
+0x0103 - 0000 0001 0000 0011 - none     , none     , none     , none     , none     , none
+0x0153 - 0000 0001 0101 0011 - bitmap(0), bitmap(0), none     , cells(?) , cells(?) , table
+0x0303 - 0000 0011 0000 0011 - bitmap(0), bitmap(0), none     , black    , bitmap(1), none
+0x0503 - 0000 0101 0000 0011 - bitmap(0), bitmap(0), none     , none     , none     , none
+0x0f03 - 0000 1111 0000 0011 - bitmap(0), bitmap(0), none     , cells(?) , cells(1) , table
+0x1103 - 0001 0001 0000 0011 - cells(0) , cells(0) , table    , none     , none     , table
+0x1307 - 0001 0011 0000 0111 - cells(0) , cells(0) , table    , none     , none     , table
+0x2103 - 0010 0001 0000 0011 - none     , none     , none     , bitmap(0), bitmap(0), none
+0x2303 - 0010 0011 0000 0011 - bitmap(0), bitmap(0), none     , black    , bitmap(1), none
+0x2703 - 0010 0111 0000 0011 - bitmap(0), bitmap(0), none     , bitmap(1), bitmap(1), none
+0x2707 - 1010 0111 0000 0111 - bitmap(0), bitmap(0), none     , black    , bitmap(1), none
+0xa703 - 1010 0111 0000 0011 - bitmap(0), bitmap(0), none     , black    , bitmap(1), none
+0xa707 - 1010 0111 0000 0111 - bitmap(0), bitmap(0), none     , black    , bitmap(1), none
+0xa783 - 1010 0111 1000 0011 - bitmap(0), bitmap(0), none     , bitmap(1), bitmap(1), none
+
+
+Note: fed06 -> very good to match the scroll panes to the surface
+
+abcd efgh ijkl mnop
+
+
+d - 0 = bitmap; 1 = cells in slot 0,1 table in 2,5; note: no single bit to find "slot 0,1 are empty"
+
+| fed06  | 0x180ff38       | -200             | 384              | 0xfdc0c000          | -576             | 270.0ｰ           | 0xff380000      | 390.0000        |
+
+todo:
+* moving meshes: home (moving train inclusive animated smoke)
+* shadows: jousai
+* half transparent sprites: torches in tomt00
+* faces always facing the viewer: trees in btl02, torches in tomt00

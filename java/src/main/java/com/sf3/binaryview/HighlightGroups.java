@@ -49,7 +49,11 @@ public class HighlightGroups {
 
     public void addRange(String groupName, int start, int size) {
         HighlightGroup group = getGroup(groupName);
-        group.getHighlights().add(new DataRange(start, size));
+        DataRange dataRange = new DataRange(start, size);
+        // don't add duplicates to same group
+        if (!group.getHighlights().contains(dataRange)) {
+            group.getHighlights().add(dataRange);
+        }
     }
 
     public void addPointer(String groupName, int location, int destination) {
