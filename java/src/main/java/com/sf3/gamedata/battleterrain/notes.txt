@@ -1,0 +1,24 @@
+x2st009
+
+chunk2 meshes
+11000 => 0008
+11004 => 060c
+  11010 => FF9d (rotation or (negative) position)
+  1101c => 0001 0000 (scale) (huh? 4x scale?)
+  11030 => ffa8 (again rotation or position)
+
+=> size: 20 bytes (0x14)
+
+
+chunk2 textures
+
+* 0x8c
+* 0x14
+* 0xf
+* f680 (decompressed size)
+* 0
+* 0
+
+0x12894 - 0x12818 => 7c
+
+

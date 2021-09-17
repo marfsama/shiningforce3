@@ -27,7 +27,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class BattleMeshRead {
-    private static final String basePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk/bin";
+    private static final String basePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk/bin/x8-battlemesh";
+    private static final String outBasePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/battlemodel";
 
     public static void main(String[] args) throws IOException {
         analyzeFiles();
@@ -103,13 +104,13 @@ public class BattleMeshRead {
     private static void analyzeFiles() {
         String[] letters = new String[] {"a","b","c", "d","e","f","g", "h"};
 
-        List<String> files = new ArrayList<>();
-        for (int num = 0; num <= 3; num++) {
-            for (String letter : letters) {
-                files.add(String.format("x8pc%02d%s", num, letter));
-            }
-        }
-
+//        List<String> files = new ArrayList<>();
+//        for (int num = 0; num <= 3; num++) {
+//            for (String letter : letters) {
+//                files.add(String.format("x8pc%02d%s", num, letter));
+//            }
+//        }
+//
 //        files.forEach(BattleMeshRead::analyzeFile);
 
         for (int i = 700; i <= 710; i++) {
@@ -120,7 +121,7 @@ public class BattleMeshRead {
     private static void analyzeFile(String fileName) {
         try {
             Path path = Paths.get(basePath, fileName + ".bin");
-            Path outPath = Paths.get(fileName + "_full.json");
+            Path outPath = Paths.get(outBasePath, fileName + "_full.json");
             if (!Files.exists(path) || Files.size(path) < 10) {
                 return;
             }
@@ -130,7 +131,7 @@ public class BattleMeshRead {
             System.out.println("write: " + outPath.toAbsolutePath().toString());
             Files.writeString(outPath, Utils.toPrettyFormat(file.toString()));
         }
-        catch (IOException ioe) {
+        catch (Exception ioe) {
             throw new IllegalStateException(fileName, ioe);
         }
     }
@@ -314,7 +315,8 @@ public class BattleMeshRead {
         List<BufferedImage> images = textures.getObject("images");
         String filename = textures.getObject("textureFileName");
 
-        List<TextureUv> uvs = Sf3Util.writeTextureImage(images, colors, filename, 0, false);
+        String outPath = Paths.get(outBasePath, filename).toAbsolutePath().toString();
+        List<TextureUv> uvs = Sf3Util.writeTextureImage(images, colors, outPath, 0, false);
         textures.addProperty("uvs", uvs);
         if (uvs.isEmpty()) {
             textures.removeProperty("textureFileName");
@@ -453,11 +455,11 @@ public class BattleMeshRead {
         return points;
     }
 
-    public static List<Quarternion> zipRotations(List<Fixed> x, List<Fixed> y, List<Fixed> z, List<Fixed> theta) {
-        List<Quarternion> points = new ArrayList<>();
+    public static List<Quaternion> zipRotations(List<Fixed> x, List<Fixed> y, List<Fixed> z, List<Fixed> theta) {
+        List<Quaternion> points = new ArrayList<>();
         int length = Math.min(x.size(), Math.min(y.size(), Math.min(z.size(), theta.size())));
         for (int i = 0; i < length; i++) {
-            points.add(new Quarternion(x.get(i), y.get(i), z.get(i), theta.get(i)));
+            points.add(new Quaternion(x.get(i), y.get(i), z.get(i), theta.get(i)));
         }
         return points;
     }
@@ -508,8 +510,8 @@ public class BattleMeshRead {
         stream.seek(chunk.getStart() + chunk.getInt("meshOffset"));
         Block bodyMeshes = chunk.createBlock("body_meshes", (int) stream.getStreamPosition(), 0);
         for (int i = 0; i < numMeshes; i++) {
-            PolygonDataExtended polygonData = new PolygonDataExtended(stream, "mesh[" + i + "]");
-            bodyMeshes.addBlock(polygonData);
+            PolygonDataExtended polygonData = new PolygonDataExtended(stream);
+            bodyMeshes.addProperty("poly_"+i, polygonData);
         }
         // read mesh details (points, vertex indices, polygon attributes)
         for (Object object : bodyMeshes.getProperties().values()) {
@@ -520,9 +522,9 @@ public class BattleMeshRead {
         // read weapon mesh
         if (weaponMeshOffset.getValue() > 0 ) {
             stream.seek(chunk.getStart() + weaponMeshOffset.getValue());
-            PolygonDataExtended weaponMesh = new PolygonDataExtended(stream, "weaponMesh");
+            PolygonDataExtended weaponMesh = new PolygonDataExtended(stream);
             weaponMesh.readDetails2(stream, chunk.getStart());
-            chunk.addBlock(weaponMesh);
+            chunk.addProperty("weaponMesh", weaponMesh);
         }
         chunk.addProperty("offset_pdata", new HexValue((int) stream.getStreamPosition()));
 
@@ -585,7 +587,7 @@ public class BattleMeshRead {
                     skeletonStream.seek(((skeletonStream.getStreamPosition() + 3) / 4) * 4);
                     Tag tag = new Tag(command);
                     tag.translation = new Point(skeletonStream);
-                    tag.rotation = new Quarternion(Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream));
+                    tag.rotation = new Quaternion(Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream), Sf3Util.readSglFixed(skeletonStream));
                     tag.scale = new Point(skeletonStream);
                     boneStack.peek().addTag(tag);
                     break;
@@ -641,7 +643,7 @@ public class BattleMeshRead {
     private static class Tag {
         final int type;
         Point translation;
-        Quarternion rotation;
+        Quaternion rotation;
         Point scale;
 
         public Tag(int type) {

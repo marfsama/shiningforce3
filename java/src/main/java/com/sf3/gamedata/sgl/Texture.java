@@ -2,6 +2,7 @@ package com.sf3.gamedata.sgl;
 
 import com.sf3.gamedata.utils.Block;
 import com.sf3.gamedata.utils.HexValue;
+import lombok.Getter;
 
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.io.IOException;
  *
  * @see "SGL Strucure Reference, page 10"
  */
+@Getter
 public class Texture extends Block {
     /** Structure size in bytes. */
     public static final int SIZE = 8;

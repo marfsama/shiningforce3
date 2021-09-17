@@ -329,8 +329,7 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
         blender_mesh = bpy.data.meshes.new(name)
         bm = bmesh.new()
         points = mesh.get("points")
-        for point_str in points:
-            point = json.loads(point_str)
+        for point in points:
             bm.verts.new(point)
         bm.verts.ensure_lookup_table()
         uv_layer = bm.loops.layers.uv.verify()
@@ -342,13 +341,13 @@ class ImportSf3BattleModel(bpy.types.Operator, ImportHelper):
             if bm.faces.get(bm_vertices) is None:
                 face = bm.faces.new(bm_vertices)
                 # add uv if the face is textured
-                attribute_dir = int(attribute.get("dir"), 16)
+                attribute_dir = attribute.get("dir")
                 draw_mode = attribute_dir & 0x0f
                 flip_mode = (attribute_dir >> 4) & 0x3
                 if draw_mode == DRAW_MODE_TEXTURED:
                     texture_id = attribute.get("texno")
                 else:
-                    color = int(attribute.get("colno"), 16)
+                    color = attribute.get("colno")
                     col_index = solid_colors.index(color)
                     texture_id = num_textures + col_index
 

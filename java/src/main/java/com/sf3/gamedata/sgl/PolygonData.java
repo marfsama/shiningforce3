@@ -1,7 +1,9 @@
 package com.sf3.gamedata.sgl;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
+import lombok.SneakyThrows;
 
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
@@ -23,11 +25,11 @@ public class PolygonData {
     private final int numPoints;
     private final int numPolygons;
 
-    @JsonIgnore
+//    @JsonIgnore
     private final int pointsOffset;
-    @JsonIgnore
+//    @JsonIgnore
     private final int polygonOffset;
-    @JsonIgnore
+//    @JsonIgnore
     private final int polygonAttributesOffset;
 
 
@@ -94,16 +96,9 @@ public class PolygonData {
         }
     }
 
+    @SneakyThrows
     @Override
     public String toString() {
-        if (points == null) {
-            return super.toString();
-        }
-
-        return "{" +
-                "\"points\":" + points +
-                ", \"polygons\":" + polygons +
-                ", \"polygonAttributes\":" + polygonAttributes +
-                '}';
+        return new ObjectMapper().writeValueAsString(this);
     }
 }

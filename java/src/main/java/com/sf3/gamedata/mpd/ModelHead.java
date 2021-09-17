@@ -30,6 +30,8 @@ public class ModelHead {
     private final Point position;
     private final List<Float> rotation;
     private final Point scale;
+    private final int unknown1;
+    private final int unknown2;
     private List<PolygonData> polygonData;
 
     public ModelHead(ImageInputStream stream, int relativeOffset) throws IOException {
@@ -71,7 +73,8 @@ public class ModelHead {
 
         this.scale = new Point(stream);
         // padding
-        stream.readInt();
+        this.unknown1 = stream.readUnsignedShort();
+        this.unknown2 = stream.readUnsignedShort();
     }
 
     public List<PolygonData> getPolygonData() {

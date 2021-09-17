@@ -1,24 +1,22 @@
 package com.sf3.gamedata.mpd;
 
-import com.sf3.gamedata.utils.HexValue;
 import com.sf3.util.Sf3Util;
 
 import javax.imageio.stream.ImageInputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 
 public class Surface2 {
-    private int width = 64;
-    private int height = 64;
+    private final int width = 64;
+    private final int height = 64;
 
     /** List of 64x64 Integers, each byte corresponding to the height of the tile. */
-    private List<Integer> heightMap = new ArrayList<>();
+    private final List<Integer> heightMap = new ArrayList<>();
     /** List of 64x64 unknown Integers (16 bit). Might be tile center height for ramp movement. */
-    private List<Integer> unknown1 = new ArrayList<>();
+    private final List<Integer> unknown1 = new ArrayList<>();
     /** List of 64x64 unknown Integers (8 bit). */
-    private List<Integer> unknown2 = new ArrayList<>();
+    private final List<Integer> trigger = new ArrayList<>();
 
     public Surface2(ImageInputStream stream) {
         for (int i = 0; i < 64 * 64; i++) {
@@ -28,7 +26,7 @@ public class Surface2 {
             unknown1.add(Sf3Util.readUnsignedShort(stream));
         }
         for (int i = 0; i < 64 * 64; i++) {
-            unknown2.add(Sf3Util.readUnsignedByte(stream));
+            trigger.add(Sf3Util.readUnsignedByte(stream));
         }
     }
 
@@ -40,8 +38,8 @@ public class Surface2 {
         return unknown1.get(y * width + x);
     }
 
-    public Integer getUnknown2(int x, int y) {
-        return unknown2.get(y * width + x);
+    public Integer getTrigger(int x, int y) {
+        return trigger.get(y * width + x);
     }
 
     private List<String> listToString(BinaryOperator<Integer> valueFunction) {
@@ -61,7 +59,7 @@ public class Surface2 {
         return "{" +
                 "\"heights\": " +"["+String.join(", ", listToString(this::getHeightMapValue))+"]," +
                 "\"unknown1\": " +"["+String.join(", ", listToString(this::getUnknown1))+"]," +
-                "\"unknown2\": " +"["+String.join(", ", listToString(this::getUnknown2))+"]" +
+                "\"trigger\": " +"["+String.join(", ", listToString(this::getTrigger))+"]" +
                 "}";
     }
 }

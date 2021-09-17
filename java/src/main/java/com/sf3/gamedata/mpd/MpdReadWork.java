@@ -31,15 +31,15 @@ public class MpdReadWork extends MpdRead {
 
 
         List<String> files = Files.list(Paths.get(basePath))
-                .filter(path -> Files.isRegularFile(path))
-                .map(path -> path.getFileName())
-                .map((name -> name.toString()))
+                .filter(Files::isRegularFile)
+                .map(Path::getFileName)
+                .map((Path::toString))
                 .map(name -> name.replace(".mpd", ""))
                 .filter(name -> !name.equals("ship2"))
                 .sorted()
                 .collect(Collectors.toList());
         files = Arrays.asList(
-                "as_oku"
+                "s_rm01"
               //"nasu00", "a_rm01", "s_rm01", "sara06", "s_rm02", "s_rm03", "striin", "stri"
         );
 
@@ -62,33 +62,42 @@ public class MpdReadWork extends MpdRead {
     }
 
     private static void fillStatistics(Statistics statistics, String file, Block mpdFile) {
-        statistics.addField(file, "header_short[0]", mpdFile.getObject("header", "short[0]"));
-        statistics.addField(file, "header_short[1]", mpdFile.getObject("header", "short[1]"));
-        statistics.addField(file, "header_value_01", mpdFile.getObject("header", "value_01"));
-        statistics.addField(file, "header_value_02", mpdFile.getObject("header", "value_02"));
-        statistics.addField(file, "unknown_angle",
-                mpdFile.getObject("header", "unknown_angle")+" "+new Angle(
-                        mpdFile.<HexValue>getObject("header", "unknown_angle").getValue()
-                )
+//        statistics.addField(file, "header_short[0]", mpdFile.getObject("header", "short[0]"));
+//        statistics.addField(file, "header_short[1]", mpdFile.getObject("header", "short[1]"));
+//        statistics.addField(file, "header_value_01", mpdFile.getObject("header", "value_01"));
+//        statistics.addField(file, "header_value_02", mpdFile.getObject("header", "value_02"));
+//        statistics.addField(file, "unknown_angle",
+//                mpdFile.getObject("header", "unknown_angle")+" "+new Angle(
+//                        mpdFile.<HexValue>getObject("header", "unknown_angle").getValue()
+//                )
+//        );
+//
+//        statistics.addField(file, "header_value_05",
+//                new HexValue(mpdFile.<HexValue>getObject("header", "value_05").getValue())
+//        );
+//        statistics.addField(file, "header_value_06",
+//                new Fixed(mpdFile.<HexValue>getObject("header", "value_06").getValue())
+//        );
+//        statistics.addField(file, "header_value_05a",
+//                (short) ((mpdFile.<HexValue>getObject("header", "value_05").getValue() >> 16) & 0xffff)
+//        );
+//        statistics.addField(file, "header_value_05b",
+//                (short) ((mpdFile.<HexValue>getObject("header", "value_05").getValue()) & 0xffff)
+//        );
+//        statistics.addField(file, "header_value_06a",
+//                (short) ((mpdFile.<HexValue>getObject("header", "value_06").getValue() >> 16) & 0xffff)
+//        );
+//        statistics.addField(file, "header_value_06b",
+//                (short) ((mpdFile.<HexValue>getObject("header", "value_06").getValue()) & 0xffff)
+//        );
+//        statistics.addField(file, "gouraud_tables",
+//                ((mpdFile.<MapObjects>getObject("map_objects")).getGouraudTables())
+//        );
+        statistics.addField(file, "unknown field upper 16 bits",
+                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown1Stuff())
         );
-
-        statistics.addField(file, "header_value_05",
-                new HexValue(mpdFile.<HexValue>getObject("header", "value_05").getValue())
-        );
-        statistics.addField(file, "header_value_06",
-                new Fixed(mpdFile.<HexValue>getObject("header", "value_06").getValue())
-        );
-        statistics.addField(file, "header_value_05a",
-                (short) ((mpdFile.<HexValue>getObject("header", "value_05").getValue() >> 16) & 0xffff)
-        );
-        statistics.addField(file, "header_value_05b",
-                (short) ((mpdFile.<HexValue>getObject("header", "value_05").getValue()) & 0xffff)
-        );
-        statistics.addField(file, "header_value_06a",
-                (short) ((mpdFile.<HexValue>getObject("header", "value_06").getValue() >> 16) & 0xffff)
-        );
-        statistics.addField(file, "header_value_06b",
-                (short) ((mpdFile.<HexValue>getObject("header", "value_06").getValue()) & 0xffff)
+        statistics.addField(file, "unknown field lower 16 bits",
+                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown2Stuff())
         );
     }
 

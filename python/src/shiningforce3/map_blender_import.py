@@ -100,18 +100,20 @@ class ImportSf3Map(bpy.types.Operator, ImportHelper):
         file_data = json.loads(data)
         material = self.create_texture_material(context, file_data, os.path.dirname(filepath))
 
-        mesh_root = self.create_empty(context, "map_root")
+        map_root = self.create_empty(context, "map_root")
 
-        self.create_meshes(context, file_data, material, mesh_root)
-        #self.create_header_objects(context, file_data, material, mesh_root)
-        self.create_surface(context, file_data, material, mesh_root)
+        self.create_meshes(context, file_data, material, map_root)
+        #self.create_header_objects(context, file_data, material, map_root)
+        self.create_surface(context, file_data, material, map_root)
 
-        self.create_scroll_planes(context, os.path.dirname(filepath), file_data, mesh_root)
+        self.create_scroll_planes(context, os.path.dirname(filepath), file_data, map_root)
 
-        mesh_root.scale = [0.01, 0.01, 0.01]
-        mesh_root.rotation_euler[0] = -1.5708
+        map_root.scale = [0.01, 0.01, 0.01]
+        map_root.rotation_euler[0] = -1.5708
 
-        self.create_walkmesh(context, file_data, mesh_root)
+        self.create_walkmesh(context, file_data, map_root)
+
+        self.create_trigger(context, file_data, map_root)
 
         return {'FINISHED'}
 
@@ -157,6 +159,33 @@ class ImportSf3Map(bpy.types.Operator, ImportHelper):
             mesh_object.data.materials.append(material)
             mesh_object.location = (0.0, header.get("scroll_plane_y"), 0.0)
             mesh_object.parent = mesh_root
+
+    def create_trigger(self, context, file_data, mesh_root):
+        surface_block = file_data.get("surface2")
+
+        if "surface2" not in surface_block:
+            return
+
+        triggers = surface_block.get("surface2").get("trigger")
+
+        triggers_root = self.create_empty(context, "trigger_root")
+        # triggers_root.rotation_euler[1] = math.radians(180)
+
+        for x in range(64):
+            for y in range(64):
+                row_array = json.loads(triggers[y])
+                trigger = row_array[x]
+                if trigger > 0:
+#                    empty = self.create_object(context, "Cube", "trigger_{}_{}_{}".format(x, y, trigger))
+                    bpy.ops.mesh.primitive_cube_add(location=(0.0, 2.0, 1.25))
+                    empty = bpy.context.object
+                    empty.name = "trigger_{}_{}_{}".format(x, y, trigger)
+                    empty.parent = triggers_root
+                    empty.location = (-x * 32-16, 0, -y * 32-16)
+                    empty.scale = (16, 16, 16)
+
+
+        triggers_root.parent = mesh_root
 
     def create_walkmesh(self, context, file_data, mesh_root):
         """Create grid for the stuff which might be a heightmap."""
@@ -423,13 +452,16 @@ class ImportSf3Map(bpy.types.Operator, ImportHelper):
                 uv[0] = uv_coords[FLIP_MODES[flip_mode][i]][0]
                 uv[1] = uv_coords[FLIP_MODES[flip_mode][i]][1]
 
+    def create_object(self, context, object_type, name):
+        obj = bpy.data.objects.new(object_type, None )
+        obj.name = name
+        obj.empty_display_size = 1
+        obj.empty_display_type = 'CUBE'
+        context.collection.objects.link(obj)
+        return obj
+
     def create_empty(self, context, name):
-        mesh_root = bpy.data.objects.new( "empty", None )
-        mesh_root.name = name
-        mesh_root.empty_display_size = 1
-        mesh_root.empty_display_type = 'CUBE'
-        context.collection.objects.link(mesh_root)
-        return mesh_root
+        return self.create_object(context, "empty",  name)
 
 def menu_func(self, context):
     self.layout.operator(ImportSf3Map.bl_idname)

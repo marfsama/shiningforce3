@@ -508,3 +508,55 @@ todo:
 * shadows: jousai
 * half transparent sprites: torches in tomt00
 * faces always facing the viewer: trees in btl02, torches in tomt00
+
+
+ATTRIBUTE(plane,sort,texno,color,gouraudaddr,attrib,drawmode,option)
+{
+  plane,                     // Flag
+  (sort)|(((drawmode)>>16)&0x1c)|(option), // Sort
+  texno,                    // texno
+  (attrib)|(((drawmode)>>24)&0xc0),     // Attributes and Modes
+  color,                    // colno
+  gouraudaddr,              // GouraudTable
+  (drawmode)&0x3f                  // dir
+}
+
+attributes
+* plane (Single_Plane, Dual_Plane)
+* sort (SORT_MIN, SORT_CEN, SORT_MAX, SORT_BFR)
+* texture (texture no or "No_Texture" which is 0)
+* color (rgb color or color bank address)
+* gouraud (gouraud table to use, addr is * 8) (see VPD Users Manual page 79)
+* mode:
+  | 15| 14| 13| 12| 11| 10| 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+    |    |                      |   |   |   |           +---+---+- Draw Mode
+    |    |                      |   |   |   +---+---+- Texture Color Mode
+    |    |                      |   |   +- clear pixels mode
+    |    |                      |   +- end code move
+    |    |                      +- mesh mode
+    |    +- clear pixels mode
+    +- end code mode
+
+  * mesh mode (bit 8)
+    * MESHoff Normal display (default)
+    * MESHon Display with mesh (see VDP1 Users Manual page 100)
+  * end code  (automatically disabled in polygon mode)
+    * ECdis Disable EndCode
+    * ECenb Enable EndCode (default)
+  * clear pixels (automatically disabled in polygon mode) (see VDP1 Users Manual page 103)
+    * SPdis Display clear pixels (default)
+    * SPenb Do not display clear pixels
+  * texture color mode
+    * CL16Bnk 16-color color bank mode (default)
+    * CL16Look 16-color look-up table mode
+    * CL64Bnk 64-color color bank mode
+    * CL128Bnk 128-color color bank mode
+    * CL256Bnk 256-color color bank mode
+    * CL32KRGB 32,768-color RGB mode
+  * draw mode (see VDP1 Users Manual page 108)
+    * CL_Rdplace Overwrite (standard) mode (default)
+    * CL_Shadow Shadow mode
+    * CL_Half Half-bright mode
+    * CL_Trans Semi-transparent mode
+    * CL_Gouraud Gouraud shading mode
+

@@ -40,7 +40,6 @@ public abstract class MpdRead {
         put("nasu00.mpd", 0x60a0000);
         put("yakata.mpd", 0x60a0000);
         put("tesmap.mpd", 0x60a0000);
-        put("sara02.mpd", 0x0292100);
 
         put("btl02.mpd", 0x60a0000);
         put("btl03.mpd", 0x60a0000);
@@ -112,7 +111,7 @@ public abstract class MpdRead {
             readMapObjects(highlightGroups, file, stream, filename);
             readSurfaceTiles(highlightGroups, stream, outPath, file, filename +".surface_tiles");
             // read texture animations, updating the animation list in the header.
-            readTextureAnimationImages(highlightGroups, stream, file, filename +".textureaminations");
+            readTextureAnimationImages(highlightGroups, stream, file);
 
             readSurfaceBlock2(highlightGroups, stream, file, outPath,filename +".surface2");
 
@@ -360,7 +359,7 @@ public abstract class MpdRead {
         }, 16, destinationPath, filename + ".surface0.trigger", false);
     }
 
-    private static void readTextureAnimationImages(HighlightGroups highlightGroups, ImageInputStream stream, Block file, String filename) throws IOException {
+    private static void readTextureAnimationImages(HighlightGroups highlightGroups, ImageInputStream stream, Block file) throws IOException {
         Block chunkOffset = file.getBlock("chunk_directory").getBlock("texture_animation_data");
         List<TextureAnimation> textureAnimations = file.getBlock("header").getObject("texture_animations");
 
@@ -753,90 +752,6 @@ public abstract class MpdRead {
         }
     }
 
-    private void readStuffAtObjectOffset2(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer2) throws IOException {
-        if (pointer2.getValue().getValue() == 0) {
-            return;
-        }
-        // read stuff at offset 2
-        stream.seek(pointer2.getRelativeOffset().getValue());
-        Block stuffAtOffset2 = block.createBlock("stuff_at_offset_2", pointer2.getRelativeOffset().getValue(), 0);
-        List<Integer> offsets = new ArrayList<>();
-        while (true) {
-            int offsetValue = stream.readInt();
-            if (offsetValue == -1) {
-                break;
-            }
-            offsets.add(offsetValue - relativeOffset);
-        }
-        stuffAtOffset2.addProperty("size", offsets.size());
-        Block offsetsBlock = stuffAtOffset2.createBlock("offsets", 0, 0);
-        int min = 0x7fff;
-        int max = 0;
-        // these values index into the list at stuff_at_offset_1.values_2
-        int offsetIndex = 0;
-        for (int singleOffset : offsets) {
-            stream.seek(singleOffset);
-            List<HexValue> values = new ArrayList<>();
-            while (true) {
-                int value = stream.readUnsignedShort();
-                if (value == 0xffff) {
-                    break;
-                }
-                min = Math.min(min, value);
-                max = Math.max(max, value);
-                values.add(new HexValue(value));
-            }
-            offsetsBlock.addProperty(new HexValue(offsetIndex).toString(), values.toString().replace('"',' '));
-            offsetIndex++;
-        }
-        highlightGroups.addRange("map_objects_stuff2", stuffAtOffset2.getStart(), (int) (stream.getStreamPosition() - stuffAtOffset2.getStart()));
-        stuffAtOffset2.addProperty("min", new HexValue(min));
-        stuffAtOffset2.addProperty("max", new HexValue(max));
-    }
-
-    private void readStuffAtObjectOffset1(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer1, Pointer pointer2) throws IOException {
-        // read stuff at offset 1
-        // maybe this is some kind of binary tree for visibility culling of the objects
-        // see bsp in doom (https://en.wikipedia.org/wiki/Binary_space_partitioning)
-
-        if (pointer1.getValue().getValue() == 0) {
-            return;
-        }
-        stream.seek(pointer1.getRelativeOffset().getValue());
-        int length = pointer2.getValue().getValue() - pointer1.getValue().getValue();
-        Block stuffAtOffset1 = block.createBlock("stuff_at_offset_1", pointer1.getRelativeOffset().getValue(), length);
-        Pointer offset1 = new Pointer(stream, relativeOffset);
-        Pointer offset2 = new Pointer(stream, relativeOffset);
-        stuffAtOffset1.addProperty("offset_1", offset1);
-        stuffAtOffset1.addProperty("offset_2", offset2);
-
-        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue(), offset1.getRelativeOffset().getValue());
-        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue()+4, offset2.getRelativeOffset().getValue());
-        stream.seek(offset1.getRelativeOffset().getValue());
-        int size1 = (offset2.getRelativeOffset().getValue() - offset1.getRelativeOffset().getValue()) / 4;
-        List<Object> values1 = new ArrayList<>();
-        // note: list seems to be terminated by 0xff
-        for (int i = 0; i < size1; i++) {
-            values1.add(new HexValue(stream.readInt()));
-        }
-        stuffAtOffset1.addProperty("count_1", values1.size());
-        stuffAtOffset1.addProperty("count_1_hex", new HexValue(values1.size()));
-        stuffAtOffset1.addProperty("values_1", values1);
-
-        stream.seek(offset2.getRelativeOffset().getValue());
-        int size2 = (pointer2.getRelativeOffset().getValue() - offset2.getRelativeOffset().getValue()) / 8;
-        List<Object> values2 = new ArrayList<>();
-
-        for (int i = 0; i < size2; i++) {
-            HexValue value1 = new HexValue(stream.readInt());
-            HexValue value2 = new HexValue(stream.readInt());
-            values2.add("\""+value1+" "+value2+"\"");
-        }
-        stuffAtOffset1.addProperty("count_2", values2.size());
-        stuffAtOffset1.addProperty("count_2_hex", new HexValue(values2.size()));
-        stuffAtOffset1.addProperty("values_2", values2);
-        highlightGroups.addRange("map_objects_stuff1", stuffAtOffset1.getStart(), stuffAtOffset1.getLength());
-    }
 
     protected List<Integer> readPalette(HighlightGroups highlightGroups, ImageInputStream stream, int offset, int toOffset) throws IOException {
         if (offset < 1) {
