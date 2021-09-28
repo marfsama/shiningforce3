@@ -62,7 +62,7 @@ public class SpriteUtils {
         return image;
     }
 
-    private static List<Integer> decompressImage(byte[] colorData, ImageInputStream commands) throws IOException {
+    public static List<Integer> decompressImage(byte[] colorData, ImageInputStream commands) throws IOException {
         List<Integer> colors = new ArrayList<>();
 
         // prepare command bitstream

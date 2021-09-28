@@ -108,7 +108,7 @@ public class Sf3Util {
         int colorsFittingInColumn = maxHeight / solidColorsSize;
         int additionalColumns = (remainingColors + colorsFittingInColumn - 1) / colorsFittingInColumn;
         // if we don't have a texture column and still need some space for solid colors
-        if (currentHeight == 0 && solidColors.isEmpty()) {
+        if (currentHeight == 0 && !solidColors.isEmpty()) {
             // allocate an additional column
             additionalColumns++;
         }
@@ -283,4 +283,13 @@ public class Sf3Util {
         BufferedReader br = new BufferedReader(new StringReader(sw.toString()));
         return br.lines().collect(Collectors.toList());
     }
+
+    public static int[] readPalette(ImageInputStream stream) throws IOException {
+        int[] palette = new int[0x100];
+        for (int i = 0; i < palette.length; i++) {
+            palette[i] = Sf3Util.rgb16ToRgb24(stream.readShort());
+        }
+        return palette;
+    }
+
 }

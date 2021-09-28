@@ -21,22 +21,32 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class KaoRead {
     public static void main(String[] args) throws IOException {
         String basePath = System.getProperty("user.home") + "/project/games/shiningforce3/data/disk/dat";
         String outPath = System.getProperty("user.home") + "/project/games/shiningforce3/data/faces";
 
-        String file = "kao001";
-        try {
-            Path path = Paths.get(basePath, file + ".dat");
-            Path out = Paths.get(outPath, file);
-            Files.createDirectories(out);
-            Block chrFile = new KaoRead().readFile(path, out, file);
-            Files.write(out.resolve(file + ".json"), Utils.toPrettyFormat(chrFile.toString()).getBytes(StandardCharsets.UTF_8));
-            System.out.println("written " + file + ".json");
-        } catch (Exception e) {
-            System.out.println(file + " => " + e.toString());
+        List<String> files = Files.list(Paths.get(basePath))
+                .filter(Files::isRegularFile)
+                .filter(file -> file.getFileName().toString().startsWith("kao"))
+                .map(Path::getFileName)
+                .map((Path::toString))
+                .map(name -> name.replace(".dat", ""))
+                .sorted()
+                .collect(Collectors.toList());
+        for (String file : files) {
+            try {
+                Path path = Paths.get(basePath, file + ".dat");
+                Path out = Paths.get(outPath, file);
+                Files.createDirectories(out);
+                Block kaoFile = new KaoRead().readFile(path, out, file);
+                Files.write(out.resolve(file + ".json"), Utils.toPrettyFormat(kaoFile.toString()).getBytes(StandardCharsets.UTF_8));
+                System.out.println("written " + file + ".json");
+            } catch (Exception e) {
+                System.out.println(file + " => " + e.toString());
+            }
         }
     }
 
@@ -50,7 +60,14 @@ public class KaoRead {
             HighlightGroups highlights = new HighlightGroups();
             file.addProperty("highlights", highlights);
 
-            readChunk(stream, file, out, highlights);
+            int offset = 0;
+            int num = 0;
+            while (offset < file.getLength()) {
+                stream.seek(offset);
+                readFace(stream, file, out, num++, highlights);
+                // skip to next full 0x800 boundary
+                offset = ((((int) stream.getStreamPosition() + 0x7ff) / 0x800) * 0x800);
+            }
 
             return file;
         } catch (IOException e) {
@@ -58,29 +75,39 @@ public class KaoRead {
         }
     }
 
-    private void readChunk(ImageInputStream stream, Block file, Path out, HighlightGroups highlights) throws IOException {
-        DecompressedStream decompressedStream1 = new DecompressedStream(stream);
-        ImageInputStream decompressedStream = decompressedStream1.toStream();
-        int length = decompressedStream1.getSize();
+    private void readFace(ImageInputStream stream, Block file, Path out, int num, HighlightGroups highlights) throws IOException {
+        ImageInputStream decompressedStream = new DecompressedStream(stream).toStream();
 
+        Block faceBlock = file.createBlock("face"+num);
         int width = decompressedStream.readUnsignedShort();
         int height = decompressedStream.readUnsignedShort();
-        List<HexValue> values = file.addProperty("values", new ArrayList<HexValue>());
-        for (int i = 0; i < 0xf; i++) {
-            values.add(new HexValue(decompressedStream.readUnsignedShort()));
+        // offsets to individual images
+        List<HexValue> offsets = faceBlock.addProperty("offsets", new ArrayList<HexValue>());
+        for (int i = 0; i < 0x9; i++) {
+            offsets.add(new HexValue(decompressedStream.readUnsignedShort()));
         }
+        int eyesWidth = decompressedStream.readUnsignedShort();
+        int eyesHeight = decompressedStream.readUnsignedShort();
+        int mouthWidth = decompressedStream.readUnsignedShort();
+        int mouthHeight = decompressedStream.readUnsignedShort();
+        int unknownWidth = decompressedStream.readUnsignedShort();
+        int unknownHeight = decompressedStream.readUnsignedShort();
+        faceBlock.addProperty("eyesWidth", eyesWidth);
+        faceBlock.addProperty("eyesHeight", eyesHeight);
+        faceBlock.addProperty("mouthWidth", mouthWidth);
+        faceBlock.addProperty("mouthHeight", mouthHeight);
+        faceBlock.addProperty("unknownWidth", new HexValue(unknownWidth));
+        faceBlock.addProperty("unknownHeight", new HexValue(unknownHeight));
+
         int[] palette = readPalette(decompressedStream);
         BufferedImage image = readBufferedImage(decompressedStream, palette, width, height);
-        ImageIO.write(image, "PNG", out.resolve("chunk1.png").toFile());
+        ImageIO.write(image, "PNG", out.resolve(num+"face.png").toFile());
 
-        BufferedImage image2 = readBufferedImage(decompressedStream, palette, 0x20, 30);
-        ImageIO.write(image2, "PNG", out.resolve("chunk2.png").toFile());
+        BufferedImage image2 = readBufferedImage(decompressedStream, palette, eyesWidth, eyesHeight*3);
+        ImageIO.write(image2, "PNG", out.resolve(num+"eyes.png").toFile());
 
-        BufferedImage image3 = readBufferedImage(decompressedStream, palette, 0x18, 24);
-        ImageIO.write(image3, "PNG", out.resolve("chunk3.png").toFile());
-
-        file.addProperty("length", new HexValue(length));
-        file.addProperty("currentOffset", new HexValue((int) decompressedStream.getStreamPosition()));
+        BufferedImage image3 = readBufferedImage(decompressedStream, palette, mouthWidth, mouthHeight*3);
+        ImageIO.write(image3, "PNG", out.resolve(num+"mouth.png").toFile());
     }
 
     public BufferedImage readBufferedImage(ImageInputStream stream, int[] palette, int width, int height) throws IOException {
@@ -93,23 +120,6 @@ public class KaoRead {
         return image;
     }
 
-    private List<BufferedImage> readImages(ImageInputStream stream, Path out, HighlightGroups highlights, int[] palette, List<Integer> offsets) throws IOException {
-        List<BufferedImage> result = new ArrayList<>();
-        for (int offset : offsets) {
-            stream.seek(offset);
-            ImageInputStream decompressedStream = new DecompressedStream(stream).toStream();
-            BufferedImage image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_RGB);
-            for (int i = 0; i < 32 * 32; i++) {
-                int x = i % 32;
-                int y = i / 32;
-                int color = palette[decompressedStream.readUnsignedByte()];
-                image.setRGB(x, y, color);
-            }
-            result.add(image);
-        }
-        return result;
-    }
-
     private int[] readPalette(ImageInputStream stream) throws IOException {
         int[] palette = new int[0x100];
         for (int i = 0; i < palette.length; i++) {
@@ -118,17 +128,4 @@ public class KaoRead {
         return palette;
     }
 
-    private List<Integer> readHeader(ImageInputStream stream, Block file, HighlightGroups highlights) throws IOException {
-        Block header = file.createBlock("header");
-        List<Integer> imageOffsets = new ArrayList<>();
-        while (true) {
-            int offset = stream.readInt();
-            if (offset == -1) {
-                break;
-            }
-            imageOffsets.add(offset);
-            highlights.addPointer("sprite", (int) (stream.getStreamPosition() - 4), offset);
-        }
-        return imageOffsets;
-    }
 }

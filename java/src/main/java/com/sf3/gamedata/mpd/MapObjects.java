@@ -3,20 +3,15 @@ package com.sf3.gamedata.mpd;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sf3.binaryview.HighlightGroups;
-import com.sf3.gamedata.sgl.Point;
-import com.sf3.gamedata.sgl.Polygon;
-import com.sf3.gamedata.sgl.PolygonAttribute;
-import com.sf3.gamedata.sgl.PolygonData;
-import com.sf3.gamedata.utils.Block;
+import com.sf3.gamedata.sgl.*;
 import com.sf3.gamedata.utils.HexValue;
+import lombok.Data;
 import lombok.Getter;
 import lombok.SneakyThrows;
 
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Getter
@@ -24,26 +19,31 @@ public class MapObjects {
     @JsonIgnore
     private final int offset;
     @JsonIgnore
-    private final Pointer pointer1;
+    private final Pointer offsetLineSegments;
     @JsonIgnore
-    private final Pointer pointer2;
+    private final Pointer offsetCollisionPages;
 
     private final int numObjects;
     @JsonIgnore
     private final int headerZero;
+//    @JsonIgnore
     private final List<ModelHead> models;
+    /** List of collision line segments. */
+    private final LineSegments lineSegments;
+    /** Map of 16x16 pages (row major) and a list of line segments which are (partly or complete) in this page. */
+    private final Map<Integer, List<Integer>> collisionPages;
 
     public MapObjects(ImageInputStream stream, int relativeOffset, HighlightGroups highlightGroups) throws IOException {
         this.offset = (int) stream.getStreamPosition();
 
-        this.pointer1 = new Pointer(stream, relativeOffset);
-        this.pointer2 = new Pointer(stream, relativeOffset);
+        this.offsetLineSegments = new Pointer(stream, relativeOffset);
+        this.offsetCollisionPages = new Pointer(stream, relativeOffset);
 
         this.numObjects = stream.readUnsignedShort();
         this.headerZero = stream.readUnsignedShort();
 
-        highlightGroups.addPointer("map_objects_header", offset, pointer1.getRelativeOffset().getValue());
-        highlightGroups.addPointer("map_objects_header", offset+4, pointer2.getRelativeOffset().getValue());
+        highlightGroups.addPointer("map_objects_header", offset, offsetLineSegments.getRelativeOffset().getValue());
+        highlightGroups.addPointer("map_objects_header", offset+4, offsetCollisionPages.getRelativeOffset().getValue());
         highlightGroups.addRange("map_objects_header", offset, 0xc);
 
         this.models = new ArrayList<>();
@@ -66,8 +66,8 @@ public class MapObjects {
             }
         }
 
-//        readStuffAtObjectOffset1(highlightGroups, stream, relativeOffset, block, pointer1, pointer2);
-//        readStuffAtObjectOffset2(highlightGroups, stream, relativeOffset, block, pointer2);
+        this.lineSegments = readCollisionLineSegments(highlightGroups, stream, relativeOffset, offsetLineSegments, offsetCollisionPages);
+        this.collisionPages = readCollisionPages(highlightGroups, stream, relativeOffset, offsetCollisionPages);
     }
 
     public List<HexValue> getGouraudTables() {
@@ -101,91 +101,94 @@ public class MapObjects {
                 .collect(Collectors.toList());
     }
 
-//    private void readStuffAtObjectOffset1(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer1, Pointer pointer2) throws IOException {
-//        // read stuff at offset 1
-//        // maybe this is some kind of binary tree for visibility culling of the objects
-//        // see bsp in doom (https://en.wikipedia.org/wiki/Binary_space_partitioning)
-//
-//        if (pointer1.getValue().getValue() == 0) {
-//            return;
-//        }
-//        stream.seek(pointer1.getRelativeOffset().getValue());
-//        int length = pointer2.getValue().getValue() - pointer1.getValue().getValue();
-//        Block stuffAtOffset1 = block.createBlock("stuff_at_offset_1", pointer1.getRelativeOffset().getValue(), length);
-//        Pointer offset1 = new Pointer(stream, relativeOffset);
-//        Pointer offset2 = new Pointer(stream, relativeOffset);
-//        stuffAtOffset1.addProperty("offset_1", offset1);
-//        stuffAtOffset1.addProperty("offset_2", offset2);
-//
-//        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue(), offset1.getRelativeOffset().getValue());
-//        highlightGroups.addPointer("map_objects_header", pointer1.getRelativeOffset().getValue()+4, offset2.getRelativeOffset().getValue());
-//        stream.seek(offset1.getRelativeOffset().getValue());
-//        int size1 = (offset2.getRelativeOffset().getValue() - offset1.getRelativeOffset().getValue()) / 4;
-//        List<Object> values1 = new ArrayList<>();
-//        // note: list seems to be terminated by 0xff
-//        for (int i = 0; i < size1; i++) {
-//            values1.add(new HexValue(stream.readInt()));
-//        }
-//        stuffAtOffset1.addProperty("count_1", values1.size());
-//        stuffAtOffset1.addProperty("count_1_hex", new HexValue(values1.size()));
-//        stuffAtOffset1.addProperty("values_1", values1);
-//
-//        stream.seek(offset2.getRelativeOffset().getValue());
-//        int size2 = (pointer2.getRelativeOffset().getValue() - offset2.getRelativeOffset().getValue()) / 8;
-//        List<Object> values2 = new ArrayList<>();
-//
-//        for (int i = 0; i < size2; i++) {
-//            HexValue value1 = new HexValue(stream.readInt());
-//            HexValue value2 = new HexValue(stream.readInt());
-//            values2.add("\""+value1+" "+value2+"\"");
-//        }
-//        stuffAtOffset1.addProperty("count_2", values2.size());
-//        stuffAtOffset1.addProperty("count_2_hex", new HexValue(values2.size()));
-//        stuffAtOffset1.addProperty("values_2", values2);
-//        highlightGroups.addRange("map_objects_stuff1", stuffAtOffset1.getStart(), stuffAtOffset1.getLength());
-//    }
-//
-//    private void readStuffAtObjectOffset2(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Block block, Pointer pointer2) throws IOException {
-//        if (pointer2.getValue().getValue() == 0) {
-//            return;
-//        }
-//        // read stuff at offset 2
-//        stream.seek(pointer2.getRelativeOffset().getValue());
-//        Block stuffAtOffset2 = block.createBlock("stuff_at_offset_2", pointer2.getRelativeOffset().getValue(), 0);
-//        List<Integer> offsets = new ArrayList<>();
-//        while (true) {
-//            int offsetValue = stream.readInt();
-//            if (offsetValue == -1) {
-//                break;
-//            }
-//            offsets.add(offsetValue - relativeOffset);
-//        }
-//        stuffAtOffset2.addProperty("size", offsets.size());
-//        Block offsetsBlock = stuffAtOffset2.createBlock("offsets", 0, 0);
-//        int min = 0x7fff;
-//        int max = 0;
-//        // these values index into the list at stuff_at_offset_1.values_2
-//        int offsetIndex = 0;
-//        for (int singleOffset : offsets) {
-//            stream.seek(singleOffset);
-//            List<HexValue> values = new ArrayList<>();
-//            while (true) {
-//                int value = stream.readUnsignedShort();
-//                if (value == 0xffff) {
-//                    break;
-//                }
-//                min = Math.min(min, value);
-//                max = Math.max(max, value);
-//                values.add(new HexValue(value));
-//            }
-//            offsetsBlock.addProperty(new HexValue(offsetIndex).toString(), values.toString().replace('"',' '));
-//            offsetIndex++;
-//        }
-//        highlightGroups.addRange("map_objects_stuff2", stuffAtOffset2.getStart(), (int) (stream.getStreamPosition() - stuffAtOffset2.getStart()));
-//        stuffAtOffset2.addProperty("min", new HexValue(min));
-//        stuffAtOffset2.addProperty("max", new HexValue(max));
-//    }
+    @Data
+    private static class Stuff2 {
+        public HashMap<Integer, List<Integer>> collisionPages;
+    }
 
+    private Map<Integer, List<Integer>> readCollisionPages(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Pointer offsetCollisionPages) throws IOException {
+        if (offsetCollisionPages.getValue().getValue() == 0) {
+            return null;
+        }
+        // read stuff at offset 2
+        stream.seek(offsetCollisionPages.getRelativeOffset().getValue());
+        List<HexValue> offsets = new ArrayList<HexValue>();
+        for (int i = 0; i < 256; i++) {
+            int offsetValue = stream.readInt();
+            offsets.add(new HexValue(offsetValue - relativeOffset));
+        }
+        // these values index into the list at stuff_at_offset_1.values_2
+        Map<Integer, List<Integer>> collisionPages = new LinkedHashMap<>();
+        int offsetIndex = 0;
+        for (HexValue singleOffset : offsets) {
+            stream.seek(singleOffset.getValue());
+            List<Integer> values = new ArrayList<>();
+            while (true) {
+                int value = stream.readUnsignedShort();
+                if (value == 0xffff) {
+                    break;
+                }
+                values.add(value);
+            }
+            collisionPages.put(offsetIndex, values);
+            offsetIndex++;
+        }
+        highlightGroups.addRange("map_collision_pages", offsetCollisionPages.getRelativeOffset().getValue(), (int) (stream.getStreamPosition() - offsetCollisionPages.getRelativeOffset().getValue()));
+        return collisionPages;
+    }
+
+    @Data
+    public static class LineSegment {
+        private final int left;
+        private final int right;
+        private final Point normal;
+    }
+
+    @Data
+    public static class LineSegments {
+        public List<Point> points;
+        public List<LineSegment> lineSegments;
+    }
+
+    private LineSegments readCollisionLineSegments(HighlightGroups highlightGroups, ImageInputStream stream, int relativeOffset, Pointer offsetLineSegments, Pointer pointer2) throws IOException {
+        if (offsetLineSegments.getValue().getValue() == 0) {
+            return null;
+        }
+        LineSegments stuff = new LineSegments();
+        stream.seek(offsetLineSegments.getRelativeOffset().getValue());
+        int length = pointer2.getValue().getValue() - offsetLineSegments.getValue().getValue();
+        Pointer offset1 = new Pointer(stream, relativeOffset);
+        Pointer offset2 = new Pointer(stream, relativeOffset);
+
+        highlightGroups.addPointer("map_objects_header1a", offsetLineSegments.getRelativeOffset().getValue(), offset1.getRelativeOffset().getValue());
+        highlightGroups.addPointer("map_objects_header1b", offsetLineSegments.getRelativeOffset().getValue()+4, offset2.getRelativeOffset().getValue());
+        stream.seek(offset1.getRelativeOffset().getValue());
+        int size1 = (offset2.getRelativeOffset().getValue() - offset1.getRelativeOffset().getValue()) / 4;
+        List<Point> values1 = new ArrayList<>();
+        // note: list seems to be terminated by 0xff
+        for (int i = 0; i < size1; i++) {
+            Fixed x = new Fixed(stream.readShort() << (8+3));
+            Fixed y = new Fixed(stream.readShort() << (8+3));
+            values1.add(new Point(x,y,new Fixed(0)));
+        }
+        stuff.points = values1;
+        highlightGroups.addRange("mo_points", offset1.getRelativeOffset().getValue(), (int) (stream.getStreamPosition() - offset1.getRelativeOffset().getValue()));
+
+        stream.seek(offset2.getRelativeOffset().getValue());
+        int size2 = (pointer2.getRelativeOffset().getValue() - offset2.getRelativeOffset().getValue()) / 8;
+        List<LineSegment> values2 = new ArrayList<>();
+
+        for (int i = 0; i < size2; i++) {
+            int leftPointIndex = stream.readUnsignedShort();
+            int rightPointIndex = stream.readUnsignedShort();
+            Fixed normalX = new Fixed(stream.readUnsignedShort());
+            Fixed normalY = new Fixed(stream.readUnsignedShort());
+            values2.add(new LineSegment(leftPointIndex, rightPointIndex, new Point(normalX, normalY, Fixed.ZERO)));
+        }
+        stuff.lineSegments = values2;
+        highlightGroups.addRange("mo_linesegments", offset2.getRelativeOffset().getValue(), (int) (stream.getStreamPosition() - offset2.getRelativeOffset().getValue()));
+        return stuff;
+    }
 
 
     @SneakyThrows

@@ -1,5 +1,9 @@
 package com.sf3.gamedata.sgl;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.sf3.gamedata.mpd.serializer.FixedSerializer;
+import com.sf3.gamedata.mpd.serializer.PointSerializer;
+
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.util.Locale;
@@ -10,9 +14,11 @@ import java.util.Locale;
  * @see "SGL Programmers Tutorial, page 1-8"
  * @see "SGL Structure Reference, page 19"
  */
+@JsonSerialize(using = FixedSerializer.class)
 public class Fixed {
     /** Structure size in bytes. */
     public static final int SIZE = 4;
+    public static final Fixed ZERO = new Fixed(0);
     /** Raw fixed point value. */
     private final int value;
 

@@ -21,7 +21,8 @@ bochi.mpd (vandal home)
 => color format: 32k colors (16 bits)
 
 /* slColRAMMode */
-#define		CRM16_1024		0
+#deflC
+ine		CRM16_1024		0
 #define		CRM16_2048		1
 #define		CRM32_1024		2
 /* slChar */

@@ -26,8 +26,8 @@ import java.util.stream.IntStream;
 /** contains all stuff which is work in progress. Already known stuff is in {@link MpdRead}. */
 public class MpdReadWork extends MpdRead {
     public static void main(String[] args) throws IOException {
-        String basePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk/mpd";
-        String outPath = System.getProperty("user.home")+"/project/games/shiningforce3/data/maps/";
+        String basePath = System.getProperty("user.home")+"/project/games/shiningforce3/data/disk2/mpd";
+        String outPath = System.getProperty("user.home")+"/project/games/shiningforce3/data/maps2/";
 
 
         List<String> files = Files.list(Paths.get(basePath))
@@ -38,10 +38,10 @@ public class MpdReadWork extends MpdRead {
                 .filter(name -> !name.equals("ship2"))
                 .sorted()
                 .collect(Collectors.toList());
-        files = Arrays.asList(
-                "s_rm01"
+//        files = Arrays.asList(
+//                "s_rm01"
               //"nasu00", "a_rm01", "s_rm01", "sara06", "s_rm02", "s_rm03", "striin", "stri"
-        );
+//        );
 
         Statistics statistics = new Statistics();
         for (String file : files) {
@@ -93,12 +93,12 @@ public class MpdReadWork extends MpdRead {
 //        statistics.addField(file, "gouraud_tables",
 //                ((mpdFile.<MapObjects>getObject("map_objects")).getGouraudTables())
 //        );
-        statistics.addField(file, "unknown field upper 16 bits",
-                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown1Stuff())
-        );
-        statistics.addField(file, "unknown field lower 16 bits",
-                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown2Stuff())
-        );
+//        statistics.addField(file, "unknown field upper 16 bits",
+//                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown1Stuff())
+//        );
+//        statistics.addField(file, "unknown field lower 16 bits",
+//                ((mpdFile.<MapObjects>getObject("map_objects")).getUnknown2Stuff())
+//        );
     }
 
     private static void decodeScrollPane(String outPath, String file, Block mpdFile) {

@@ -108,7 +108,7 @@ public abstract class MpdRead {
 
             readHeader(highlightGroups, file, stream);
             readChunkDirectory(highlightGroups, file, stream);
-            readMapObjects(highlightGroups, file, stream, filename);
+            readMapObjects(highlightGroups, outPath, file, stream, filename);
             readSurfaceTiles(highlightGroups, stream, outPath, file, filename +".surface_tiles");
             // read texture animations, updating the animation list in the header.
             readTextureAnimationImages(highlightGroups, stream, file);
@@ -739,17 +739,73 @@ public abstract class MpdRead {
         }
     }
 
-    private void readMapObjects(HighlightGroups highlightGroups, Block fileBlock, ImageInputStream stream, String file) throws IOException {
-        Block mapObjects = fileBlock.getBlock("chunk_directory").getBlock("mapObjects");
-        int offset = mapObjects.getInt("relativeOffset");
+    private void readMapObjects(HighlightGroups highlightGroups, Path outPath, Block fileBlock, ImageInputStream stream, String file) throws IOException {
+        Block mapObjectsChunk = fileBlock.getBlock("chunk_directory").getBlock("mapObjects");
+        int offset = mapObjectsChunk.getInt("relativeOffset");
         int relativeOffset = OFFSETS.getOrDefault(file, DEFAULT_OFFSET) - offset;
 
         try {
             stream.seek(offset);
-            fileBlock.addProperty("map_objects", new MapObjects(stream, relativeOffset, highlightGroups));
+            MapObjects mapObjects = new MapObjects(stream, relativeOffset, highlightGroups);
+            fileBlock.addProperty("map_objects", mapObjects);
+            writeCollisionMap(mapObjects, outPath, file);
         } catch (Exception e) {
             fileBlock.addProperty("cannot_read_models", Sf3Util.getExceptionLines(e).stream().map(line -> "\""+line+"\"").collect(Collectors.toList()));
         }
+    }
+
+    private void writeCollisionMap(MapObjects mapObjects, Path outPath, String file) throws IOException {
+        MapObjects.LineSegments lineSegments = mapObjects.getLineSegments();
+        BufferedImage collisionPagesImage = new BufferedImage(1024, 1024, BufferedImage.TYPE_INT_RGB);
+        Graphics2D collisionPagesGraphics = collisionPagesImage.createGraphics();
+        BufferedImage lineSegmentImage = new BufferedImage(1024, 1024, BufferedImage.TYPE_INT_RGB);
+        Graphics2D lineSegmentGraphics = lineSegmentImage.createGraphics();
+        collisionPagesGraphics.setFont(collisionPagesGraphics.getFont().deriveFont(5));
+        lineSegmentGraphics.setFont(collisionPagesGraphics.getFont().deriveFont(5));
+
+        // draw pages
+        collisionPagesGraphics.setColor(Color.CYAN);
+        lineSegmentGraphics.setColor(Color.CYAN.darker().darker().darker().darker().darker());
+        for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+                int pageIndex = y * 16 + x;
+                collisionPagesGraphics.drawRect(x * 64, y * 64, 64, 64);
+                collisionPagesGraphics.drawString(""+pageIndex, x*64+16, y*64+16);
+                lineSegmentGraphics.drawRect(x * 64, y * 64, 64, 64);
+                lineSegmentGraphics.drawString(""+pageIndex, x*64+16, y*64+16);
+
+            }
+        }
+
+        collisionPagesGraphics.setColor(Color.WHITE);
+        for (var pageLineSegments :mapObjects.getCollisionPages().entrySet()) {
+            int page = pageLineSegments.getKey();
+            int pageX = (page % 16) * 64;
+            int pageY = (page / 16) * 64;
+            for (int segmentIndex : pageLineSegments.getValue()) {
+                MapObjects.LineSegment segment = lineSegments.lineSegments.get(segmentIndex);
+                Point left = lineSegments.points.get(segment.getLeft());
+                Point right = lineSegments.points.get(segment.getRight());
+                collisionPagesGraphics.drawLine((int) left.getX().toFloat()+pageX,(int) left.getY().toFloat()+pageY,
+                        (int)right.getX().toFloat()+pageX,(int) right.getY().toFloat()+pageY);
+            }
+        }
+        for (MapObjects.LineSegment segment : lineSegments.lineSegments) {
+            Point left = lineSegments.points.get(segment.getLeft());
+            Point right = lineSegments.points.get(segment.getRight());
+            lineSegmentGraphics.setColor(Color.WHITE);
+            lineSegmentGraphics.drawLine((int) left.getX().toFloat()*16,(int) left.getY().toFloat()*16,
+                    (int)right.getX().toFloat()*16,(int) right.getY().toFloat()*16);
+            int midX = (int) ((left.getX().toFloat() + right.getX().toFloat()) / 2);
+            int midY = (int) ((left.getY().toFloat() + right.getY().toFloat()) / 2);
+            lineSegmentGraphics.setColor(Color.MAGENTA);
+            Point normal = segment.getNormal();
+            lineSegmentGraphics.drawLine(midX*16, midY*16,
+                    (int)(midX+normal.getX().toFloat())*16, (int)(midY+normal.getY().toFloat())*16);
+        }
+        collisionPagesGraphics.dispose();
+        lineSegmentGraphics.dispose();
+        ImageIO.write(lineSegmentImage, "PNG", outPath.resolve(file+"_collisionlinesegments.png").toFile());
     }
 
 
