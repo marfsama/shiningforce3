@@ -4,14 +4,15 @@ The mpd files (Map Data) contain the 3d map data for normal travel and battle. M
 
 * static meshes like buildings, trees
 * movable or interactible meshes like barrels and chests
+* surface model (normals, textures, rendered heightmap)
 * textures and animated textures
 * skybox images
-* heightmap with textures
 * rotating scrolls used as ground (i.e. water)
-* (wild guess) walkmesh
-* (wild guess) terrain movement costs
+* surface tiles (heightmap, terrain types, event IDs)
+* lighting data (direction, palette)
+* camera and battle boundaries
 
-(Note: The file should also contain the mesh data for individual battle, but I haven't found it yet)
+Data for individual battles are stored in the X1BTL\*.BIN files.
 
 The file is split in a header, which is always loaded to 0x290000, and a list of chunks. The individual chunks are
 mostly compressed and are loaded to individual memory locations depending on the content.
@@ -24,7 +25,9 @@ mostly compressed and are loaded to individual memory locations depending on the
 |----------|--------------|------------|--------|-------------|
 | 0x00     | header       | Header     |   1    | File header. See description in Chapter [Header](#header)
 | 0x2000   | chunk_table  | ChunkTable |   1    | Table with chunk offsets and sized. See description in Chapter [Chunks](#chunks)
-| 0x2100   | chunks       | Chunk[]    | 0..20  | At most 20 chunks. See description in Chapter [Chunks](#chunks)
+| 0x2100   | chunks       | Chunk[]    | 0..19/\*21  | At most 19 or \*21 chunks. See description in Chapter [Chunks](#chunks)
+
+\* Only in Scenario 2, 3, and Premium Disk.
 
 
 # Header
@@ -64,41 +67,66 @@ This is the header.
 |---------|-----------|-------|------|--------------|
 |  0x00   | unknown_1 | int16 |  1   | Unknown. Might be map id.
 |  0x02   | unknown_2 | int16 |  1   | Always zero 0x0000
-|  0x04   | offset1   | int32 |  1   | Always 0x0c. Pointer to 0x20 unknown int16. See (#header-offset-1).
-|  0x08   | offset2   | int32 |  1   | Always 0x4c. pointer to a single unknown int32. See (#header-offset-2).
+|  0x04   | offsetLightPalette | int32 |  1   | Always 0x0c. Pointer to a table of 32 16-bit colors in ABGR1555 format. (#light-palette).
+|  0x08   | offsetLightDirection | int32 |  1   | Always 0x4c. pointer to light direction as pitch and yaw. See (#light-direction).
 |  0x0C   | offset3   | int32 |  1   | Always 0x50. pointer to 0x20 unknown int16s at the start of the file. Mostly zero or 0x8000. (#header-offset-3)
 |  0x10   | unknown_3 | int16 |  1   | Unknown small value. maybe some count?
 |  0x12   | unknown_4 | int16 |  1   | Always zero
 |  0x14   | offset4   | int32 |  1   | Always 0x90. Pointer to unknown structure. See (#header-offset-4)
 |  0x18   | offset_texture_groups | int32 |  1   | Offset to list of texture groups. See (#texture-groups)
 |  0x1C   | offset6   | int32 |  1   | Pointer to unknown list. 
-|  0x20   | offset7   | int32 |  1   | Pointer to unknown list.
+|  0x20   | offsetBoundaries | int32 |  1   | Pointer to boundaries for the camera and battle map. See (#boundaries)
 |  0x24   | offset_mesh_1 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null. 
 |  0x28   | offset_mesh_2 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
 |  0x2C   | offset_mesh_3 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
 |  0x30   | const_1   | int32 |  1   | Const 0x8000b334
 |  0x34   | const_2   | int32 |  1   | Const 0x4ccc0000
 |  0x38   | offset_texture_anim_alternative  | int32 |  1   | Pointer to a list of texture indices. These textures are the same images as the "real" texture animations, but these textures are from the normal texture block (and doesn't seems to be used). See (#texture-animation-alternatives) 
-|  0x3C   | offset_pal_1  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
-|  0x40   | offset_pal_2  | int32 |  1   | Pointer to 256 rgb16 colors. May be null.
-|  0x44   | unknown_5 | int32 |  1   | Unknown small value, may be negative.
-|  0x48   | const_3   | int32 |  1   | Const 0xc000
-|  0x4C   | unknown_6 | int32 |  1   | Unknown. Lower 16 bits often null. May me FIXED.
-|  0x50   | unknown_7 | int32 |  1   | Unknown. Small value in upper int16, 0x0000 in lower int16. May me FIXED. 
-|  0x54   | offset12  | int32 |  1   | Pointer to unknown list of exactly 8 uint16 in two block with 4 uint16 each.
+|  0x3C   | offset_pal_1  | int32 |  1   | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.
+|  0x40   | offset_pal_2  | int32 |  1   | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.
+|  \*0x44   | \*offset_pal_3 | int32 |  1   | \*(see note) Pointer to 256 colors in ABGR1555 format. Non-null.
+|  0x44/\*0x48   | unknown_5 | int32 |  1   | Unknown small value, may be negative.
+|  0x48/\*0x4C   | const_3   | int32 |  1   | Const 0xc000
+|  0x4C/\*0x50   | unknown_6 | int32 |  1   | Unknown. Lower 16 bits often null. May be FIXED.
+|  0x50/\*0x54   | unknown_7 | int32 |  1   | Unknown. Small value in upper int16, 0x0000 in lower int16. May be FIXED.
+|  0x54/\*0x58   | offset12  | int32 |  1   | Pointer to unknown list of exactly 8 uint16 in two block with 4 uint16 each.
 
-## Header Offset 1
+\*: Only for Scenario 3 or Premium Disk.
 
-This list contains exactly 32 (0x20) int16 values. The purpose is unknown.
+## Light Palette
 
-The values are sometimes repeated in blocks of 2 and strictly ascending and sometimes there is no visible pattern.
-The step from one value to the next is often 0x421.
+This is a color palette used for lighting, sorted from darkest to lightest. Each value is a 16-bit color in ABGR1555 format. The alpha bit is always zero.
 
-## Header Offset 2
+## Light Direction
 
-This list contains exactly one int32 value. The purpose is unknown.
+| Offset  | Name      | Type   | Count | Description  |
+|---------|-----------|--------|-------|--------------|
+|  0x00   | pitch     | uint16 |  1    | Pitch of the light direction (X/Z rotation). See the table below for values and their meaning.
+|  0x02   | yaw       | uint16 |  1    | Yaw of the light direction (Y rotation). See the table below for values and their meaning.
 
-This value can be the same in different maps (0xa2246167 in sara02-sara04) or totally different (0xbe6858ef in bochi).
+### Pitch Values
+
+| Value  | Meaning                                     | Lighting effect                   |
+|--------|---------------------------------------------|-----------------------------------|
+| 0x0000 | Light points forward (north at yaw 0x0000)  | A bit dark, anything with less than a 45 degree slope is very dark
+| 0x4000 | Light points up                             | Completely dark\*
+| 0x8000 | Light points backward (south at yaw 0x0000) | A bit dark, anything less than 45 degree slope is very dark
+| 0xC000 | Light points down                           | Completely bright\*
+
+The value 0x9970 is typically used for outside lighting.
+
+\* This is based on the typical outside light palette. It is not known if brightness differs depending on the palette used.
+
+### Yaw Values
+
+(The X/Z direction of the light flips when the pitch is > 0x4000 and < 0xC000)
+
+| Value  | Meaning, Pitch > 0xC000 \|\| < 0x4000 | Meaning, Pitch > 0x4000 && < 0xC000 |
+|--------|---------------------------------------|-------------------------------------|
+| 0x0000 | Light points north                    | Light points south                  |
+| 0x4000 | Light points east                     | Light points west                   |
+| 0x8000 | Light points south                    | Light points north                  |
+| 0xC000 | Light points west                     | Light points east                   |
 
 ## Header Offset 3
 
@@ -146,8 +174,32 @@ The end of the list is marked by an offset of 0xfffe.
 | Offset | Name    | Type   | Count | Description |
 |--------|---------|--------|-------|-------------|
 | 0x00   | offset  | uint16 |   1   | offset into compressed data
-| 0x02   | unknown | int16  |   1   | unknown small value
+| 0x02   | count   | uint16 |   1   | the number of in-game frames this animation frame is active, at 30fps
 
+## Boundaries
+
+Size: 18 bytes
+
+Boundaries for the camera position and battle map are stored as a box with (X1, Y1) and (X2, Y2) coordinates.
+
+Each coordinate is a *world coordinate*, rather than a *tile coordinate*. Each tile spans 32 world coordinates, with the
+tile center offset by (+16, +16).
+
+For example: The center of tile (10, 20) would be at coordinate (336, 656), or (10\*32+16, 20\*32+16).
+
+The battle boundary affects which tiles are selectable during battle and the dimensions of the viewable battle map.
+
+| Offset | Name       | Type   | Count | Description |
+|--------|------------|--------|-------|-------------|
+| 0x00   | unknown    | uint16 |   1   | unknown value
+| 0x02   | camera\_x1 |  int16 |   1   | X1 coordinate for camera bounds
+| 0x04   | camera\_y1 |  int16 |   1   | Y1 coordinate for camera bounds
+| 0x06   | camera\_x2 |  int16 |   1   | X2 coordinate for camera bounds
+| 0x08   | camera\_y2 |  int16 |   1   | Y2 coordinate for camera bounds
+| 0x0A   | battle\_x1 |  int16 |   1   | X1 coordinate for battle map bounds
+| 0x0C   | battle\_y1 |  int16 |   1   | Y1 coordinate for battle map bounds
+| 0x0E   | battle\_x2 |  int16 |   1   | X2 coordinate for battle map bounds
+| 0x10   | battle\_y2 |  int16 |   1   | Y2 coordinate for battle map bounds
 
 ## Movable or interactible objects
 
@@ -182,13 +234,17 @@ The chunks are always in the same order, but not all files need all chunk types.
 |-------------|--------------------------|------------
 |    0        | empty_1                  | This chunk always seem to be empty (size 0).
 |    1        | static_meshes            | [Static map objects](#static-meshes). Mesh data and position/rotation/scale.
-|    2        | surface                  | Surface texture, surface normals and an unknown surface attribute.
+|    2        | surface                  | Surface textures, surface normals, and heightmaps for models. Sometimes this is empty in Scenario 2 onward, but present in chunk 20 (see #chunks-20-and-21)
 |    3        | texture_animation_images | Images for animated textures. Each image is individually compressed.
 |    4        | empty_2                  | This chunk always seem to be empty (size 0).
 |    5        | surface_meshes           | Heightmap for each surface tile and some unknown surface attributes. Might be walkmesh and movement costs. The chunk is compressed.
 |  6 - 10     | textures                 | Texture images. The chunks are compressed.
 | 11 - 13     | object_textures          | Textures for movable objects (see [Header](#header)). The chunks are compressed.
 | 14 - 19     | scroll_panes             | Memory blocks for scroll panes (skybox) and rotating scrolls (ground). The chunks are compressed.
+|    20\*     | alt. surface or unknown  | \nIf Chunk 2 is empty, sometimes the surface model data is located here. However, this is sometimes used for other unknown data (see #chunks-20-and-21)
+|    21\*     | unknown                  | \*Unknown chunk data.
+
+\* Only in Scenario 2, 3, and Premimum Disk
 
 ## Compressed Streams
 
@@ -201,18 +257,18 @@ set bit in control means "command int16".
 
 ## Chunk Table
 
-Size: 20 * 8 bytes (160 Bytes)
+Size: 32 * 8 bytes (256 Bytes)
 
-Always starts at  offset 0x2000. The table only contains the offsets and the sizes. Unused chunks have the offset
-of the next chuck (the offset of the next free location in the file) and a size of zero.
+Always starts at offset 0x2000. The table only contains the offsets and the sizes. Unused chunks have the offset
+of the next chuck (the offset of the next free location in the file) and a size of zero. Chunks without a meaning
+for the scenario have both an address and size of zero.
 
 The first chunk starts at 0x2100. As the first chunk is always [static meshes](#static-meshes), this is the chunk at
 0x2100.
 
 | Offset | Name               | Type           | Count | Description
 |--------|--------------------|----------------|-------|-----------------------------
-| 0x00   | chunk_offsets      | offset[]       |  20   | offsets and sizes of the chunk.
-
+| 0x00   | chunk_offsets      | offset[]       |  32   | offsets and sizes of the chunk.
 
 ## Offset
 
@@ -349,7 +405,7 @@ Example sara06.json:
 
 | Offset | Name     | Type   | Count | Description
 |--------|----------|--------|-------|-----------------------------
-| 0x00   | offset   | int32  |  265  | list of 256 offsets which each point to a list of shorts.
+| 0x00   | offset   | int32  |  256  | list of 256 offsets which each point to a list of shorts.
 
 
 List of shorts:
@@ -630,33 +686,107 @@ Example sara06.json:
 
 The surface chunk consists of three parts which each describe some detail about the map tiles.
 The first part is the tile character (aka "texture"), the second is the tile surface normal, and the third part is
-unknown.
+a heightmap.
 
-The map consists of 64x64 tiles. In this chunk the tiles are not saved row oder column based. The map is split in 16x16
+The map consists of 64x64 tiles. In this chunk the tiles are not saved row or column based. The map is split in 16x16
 blocks of 4x4 tiles each. The tiles in these blocks are saved in row major order, and the blocks themselves are saved in
 row major order too. Some blocks (normals, unknown) describe the corner points of the tiles, so the blocks are 5x5. 
 
 The surface chunk is used primary when the ground is uneven (hills, slopes) or has different heights (platforms). In this
-case the height map in the surface heights chunk describes the geometry.
+case the heightmap in the surface heights chunk describes the geometry.
 
-This chunk is not present when the map uses rotating scrolls as the ground texture.
+This chunk is not present for maps without battles that use rotating scrolls as the ground texture.
 
 ## Surface Characters
 
 ![Surface Characters sara06.mpd](img/03_sara06_surface.png)
 
-The surface characters are always 16x16 pixels and can be partly transparent. Each tile is one uint16 which is the 
-character number. In some cases the saturn uses the higher bits in the character number to represent a mirror around
-the horizontal or vertical axis. I haven't seen one of these yet.
+The surface characters are typically 16x16 pixels, but not always (mountains and rails are 32x32 pixels, for example)
+and can be partly transparent.
+
+Each surface character is divided into 8 bits for flags and a uint8 for the texture ID:
+
+| Offset | Name       | Type  | Count | Description
+|--------|------------|-------|-------|-----------------------------
+| 0x00   | flags      | uint8 | 1     | Various flags for the texture and surface model (see table below for values)
+| 0x01   | texture_id | uint8 | 1     | The ID of the texture for this tile
+
+### Surface Character Flags
+
+#### Rotation Bits 0x01 and 0x02
+
+| Value | Meaning |
+|-------|---------|
+| 0x00  | No rotation
+| 0x01  | 90  degree counter-clockwise rotation
+| 0x02  | 180 degree rotation
+| 0x03  | 270 degree clockwise rotation
+
+#### Flip Bits 0x10 and 0x20
+
+| Value | Meaning |
+|-------|---------|
+| 0x00  | No flip
+| 0x10  | Horizontal flip
+| 0x20  | Vertical flip
+| 0x30  | Horizontal and vertical flip
+
+#### Flat Bit 0x80
+
+When this bit is set, this tile in the model is flat. The height used for the tile comes from bottom-right corner of
+the corresponding tile in the *surface mesh heightmap*, rather than the *surface model heightmap* for the tile's block.
 
 ## Surface Normals
 
 The surface normals are saved as 3 compressed FIXED for each tile.
 Note that the blocks are 5x5 here. So the normals are vertex normals and not face normals.
 
-## Unknown Surface Attribute
+The normals are in an atypical format whose exact calculations are not known. The numbers have the following characteristics:
 
-In the unknown Attribute stuff the blocks are 5x5 each and each element is a single int8. The meaning is not (yet) known.
+- Each component is a signed 16-bit compressed fixed
+- The flat, upward-facing normal is always (0x0000, 0x0001, 0x0000).
+- The magnitude of the normal increases as the tile slope increases, but there is no known pattern
+- The X and Z coordinates are a 2D directional vector
+- The 0x0001 bit is a redundant sign bit that is set when when *positive* for the Y component, but when *negative* for the X/Z components.
+
+Here are some sample data points taken from slopes with identical neighbors across various MPD files. The normals seen in
+SF3 are referred to as "abnormals":
+
+(This data was gathered before the redundant 0x0001 sign bit was known. The "abnormal" values are probably half of what is listed here.)
+
+| Slope | Angle              |  X  |  Y     | Z  |  NormalY            |  NormalZ            |  AbnormalY  | AbnormalZ  |
+|-------|--------------------|-----|--------|----|---------------------|---------------------|-------------|------------|
+| -300  | -71.5650511791235  |  0  | -3     | 1  |  0.316227766016837  |  0.948683298050514  |  0.8906555  | 1.66409302 |
+| -225  | -66.0375110273093  |  0  | -2.25  | 1  |  0.406138466053448  |  0.913811548620257  |  0.6712951  | 1.4947815  |
+| -200  | -63.4349488247351  |  0  | -2     | 1  |  0.447213595499958  |  0.894427190999916  |  0.585846   | 1.41454    |
+| -150  | -56.3099324756297  |  0  | -1.5   | 1  |  0.554700196225229  |  0.832050294337844  |  0.4000549  | 1.1999817  |
+| -100  | -45.0000000012862  |  0  | -1     | 1  |  0.707106781186547  |  0.707106781186548  |  0.2111511  | 0.8943786  |
+|  -75  | -36.8698976468978  |  0  | -0.75  | 1  |  0.8                |  0.6                |  0.1273499  | 0.70224    |
+|  -50  | -26.5650511778373  |  0  | -0.5   | 1  |  0.894427190999916  |  0.447213595499958  |  0.0597229  | 0.4850158  |
+|  -25  | -14.0362434683277  |  0  | -0.25  | 1  |  0.970142500145332  |  0.242535625036334  |  0.0154724  | 0.2480469  |
+|    0  |   0                |  0  |  0     | 1  |  1                  |  0                  |  0.0000305  | 0          |
+|   25  |  14.0362434683277  |  0  |  0.25  | 1  |  0.970142500145332  | -0.242535625036334  |  0.0154724  | 0.2480469  |
+|   50  |  26.5650511778373  |  0  |  0.5   | 1  |  0.894427190999916  | -0.447213595499958  |  0.0597229  | 0.4850158  |
+|   75  |  36.8698976468978  |  0  |  0.75  | 1  |  0.8                | -0.6                |  0.1273499  | 0.70224    |
+|  100  |  45.0000000012862  |  0  |  1     | 1  |  0.707106781186547  | -0.707106781186548  |  0.2111511  | 0.8943786  |
+|  150  |  56.3099324756297  |  0  |  1.5   | 1  |  0.554700196225229  | -0.832050294337844  |  0.4000549  | 1.1999817  |
+|  200  |  63.4349488247351  |  0  |  2     | 1  |  0.447213595499958  | -0.894427190999916  |  0.585846   | 1.41454    |
+|  225  |  66.0375110273093  |  0  |  2.25  | 1  |  0.406138466053448  | -0.913811548620257  |  0.6712951  | 1.4947815A |
+|  300  |  71.5650511791235  |  0  |  3     | 1  |  0.316227766016837  | -0.948683298050514  |  0.8906555  | 1.66409302 |
+
+## Surface Model Heightmaps
+
+The surface model heightmaps are stored in the same order as the surface normals: there are several blocks of 5x5 with each point
+representing a vertex in a mesh. Each point is a single byte.
+
+Each heightmap is generated using data from the "surface mesh heightmap" seen in chunk 5 (see #surface-mesh-heightmap).
+This has been confirmed by an automated analysis comparing the "block" heightmaps and "surface mesh" heightmaps across all
+discs.
+
+In the case that all tiles connected to a vertex in the heightmap are flat, the vertex is unused and may be
+uninitialized (zero), have stale data, or - in the case of an edge - not match the value in the neighboring block.
+
+Changing this heightmap will affect how the surface model is rendered, but not the walking mesh.
 
 # Texture Animation Images
 
@@ -670,24 +800,61 @@ can only be determined from the header.
 The surface mesh chunk is completely compressed.
 
 This chunk describes the tiles of the map in row major order directly (no blocks as in the (#surface)s).
-The size of the map is always 64x64 tiles. The parts are: height map, unknown int16 and unknown int8
+The size of the map is always 64x64 tiles. The parts are: heightmap, unknown int16 and unknown int8
 
-## Height Map
+## Surface Mesh Heightmap
 
-Each tiles height of the 4 corners is saved as 4 uint8 (there are no negative heights). Multiply this value by 2 to get
-the correct coordinate. Neighbouring tiles do not need to have the same height at the edge, so there can be a "gap" in
-the mesh. This gap will either be closed by [objects](#static-meshes) or left open when is cannot be seen during normal
-play.
+Each tiles height of the 4 corners is saved as 4 uint8 (there are no negative heights), starting at the bottom-right corner
+going clockwise.  Multiply their values by 2 to get the correct world coordinate.
+Neighbouring tiles do not need to have the same height at the edge, so there can be a "gap" in the mesh.
+This gap will either be closed by [objects](#static-meshes) or left open when is cannot be seen during normal play.
 
-## unknown (maybe slopes)
+Changing this heightmap will affect the walking mesh, but not how the surface model is rendered.
 
-These are 2 int8 for each tile. The purpose is unknown, but it may be the center of the tile when viewed as a slope.
-So the first byte is the center when it is a horizontal slope and the second for a vertical slope. 
+## Height and Terrain Type
 
-## unknown (int8)
+These values are used for movement costs and land effect values.
 
-Each tile is saved as an int8. The purpose is unknown, but this is normally mostly 0x00. As a wild guess this might
-be triggers for scripting in the corresponding map binary (x1*.bin).
+| Offset | Name         | Type  | Count | Description |
+|--------|--------------|-------|-------|-------------|
+| 0x00   | height       | uint8 | 1     | The average height\* of the tile
+| 0x01   | terrain_type | uint8 | 1     | The type of terrain and its land effect, with optional 0x40 bit for slopes (see #terrain-types)
+
+\* Taken from the average of the tile's 4 values in the surface mesh heightmap
+
+### Terrain Types
+
+Tiles are defined by hard-coded terrain types. How sprites are affected by these terrain types depends on their movement type,
+which uses another hard-coded table to determine costs.
+
+Terrain type sometimes contains a 0x40 bit present on steep slopes. This reduces the movement penalty for the tile's height. Exactly how
+this works is unknown, but the height-based penalty appears to be cut roughly in half.
+
+| Value  | Meaning |
+|--------|---------|
+| 0x00   | No entry (barrier for everything)
+| 0x01   | Air
+| 0x02   | Grassland
+| 0x03   | Dirt
+| 0x04   | Dark Grass
+| 0x05   | Forest
+| 0x06   | Brown Mountain
+| 0x07   | Desert
+| 0x08   | Grey Mountain
+| 0x09   | Water
+| 0x0A   | Unknown A (appears to be "can't stop here" tiles)
+| 0x0B   | Sand
+| 0x0C   | Enemy only
+| 0x0D   | Unknown D (appears to be "map move" tiles)
+| 0x0E   | Unknown E
+| 0x0F   | Unknown F
+
+## Event IDs
+
+An array of 64x64 uint8 values, one for each tile. Most values are zero.
+
+If non-zero, these values correspond to warps, interactable items or text, and other scripting events such as a
+trigger to open ruins. Exactly how these values work is still not known. They often correspond to scripts in an X1\*.bin file.
 
 # Texture Chunk
 
@@ -762,7 +929,7 @@ Bitmaps in chunk 0 and 1 are used as floor texture, for example grass and static
 be animated. Floor bitmaps mostly use the first palette.
 
 TODO: the bitmap scroll pane needs at least 512x256 pixels, which can be seen in the game. The lower half of the 
-background is not encoded in the map file. Where is the lower half of the image? Wild guess: x2*.bin files.
+background is not encoded in the map file. Where is the lower half of the image? Wild guess: x2\*.bin files.
 
 ## Examples
 
@@ -787,10 +954,25 @@ way the animation is created.
 Skybox from the file sara06.mpd chunk 4 (512x128) and taken from the game with yabause (NBG0, 320x320). Note the mountain in the
 background which matches in both files, whereas in the game there are some buildings and crates which are not in the mpd file. 
 
+# Chunks 20 and 21
+
+From Scenario 2 onwards, chunks 20 and 21 are present. However, there's some strange logic for what's in here:
+
+1. If chunk 2 (surface models) is *missing*, and chunk 20 is present, it always contains the surface models instead, with the exact same same
+size and data as seen in chunk 2. Chunk 21 is always missing in this case.
+
+2. If chunk 2 (surface models) is *present*, then chunk 20 is almost always present, with the exception of three files in Scenario 3 (BTLA8.MPD, FUTTO.MPD, and LEMON.MPD).
+Chunk 21 is *sometimes* present in this case, and it doesn't appear to be an "overflow" chunk that's only present if chunk 20 is too large.
+
+It's unknown why the surface model data is sometimes located in chunk 20 instead of chunk 2.
+
+When chunk 20 isn't surface data, the contents of chunks 20 and 21 are currently unknown. It likely is something added to scenario 2, like fog/snow
+effects in and outside of battle, or battle lighting data.
+
 # Issues and open points
 
 * document header
-* read list at offset6 and offset7. used in sara02 and sara04
+* read list at ~~offset6 and~~ offset7. used in sara02 and sara04
 * plot small values (< 0x100) throughout the various lists so similarities can be found.
 
 
