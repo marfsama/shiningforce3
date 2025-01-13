@@ -27,7 +27,7 @@ mostly compressed and are loaded to individual memory locations depending on the
 | 0x2000   | chunk_table  | ChunkTable |   1    | Table with chunk offsets and sized. See description in Chapter [Chunks](#chunks)
 | 0x2100   | chunks       | Chunk[]    | 0..19/\*21  | At most 19 or \*21 chunks. See description in Chapter [Chunks](#chunks)
 
-\* Only in Scenario 2, 3, and Premium Disk.
+_\* Only in Scenario 2, 3, and Premium Disk_
 
 
 # Header
@@ -91,7 +91,7 @@ This is the header.
 |  0x50/\*0x54   | unknown_7 | int32 |  1   | Unknown. Small value in upper int16, 0x0000 in lower int16. May be FIXED.
 |  0x54/\*0x58   | offset12  | int32 |  1   | Pointer to unknown list of exactly 8 uint16 in two block with 4 uint16 each.
 
-\*: Only for Scenario 3 or Premium Disk.
+_\* Only for Scenario 3 or Premium Disk_
 
 ## Light Palette
 
@@ -115,7 +115,7 @@ This is a color palette used for lighting, sorted from darkest to lightest. Each
 
 The value 0x9970 is typically used for outside lighting.
 
-\* This is based on the typical outside light palette. It is not known if brightness differs depending on the palette used.
+_\* This is based on the typical outside light palette. It is not known if brightness differs depending on the palette used._
 
 ### Yaw Values
 
@@ -155,26 +155,30 @@ duplicates.
 This is a list of texture groups which themselves have a list of the textures for the animation.
 The end of the texture group list is marked by 0xffff (texture_group = 0xffff).
 
-| Offset | Name           | Type  | Count | Description |
-|--------|----------------|-------|-------|--------------|
-| 0x00   | texture_group  | int16  |   1   | Texture number for SGL.
-| 0x02   | texture_width  | int16  |   1   | width of textures in this group
-| 0x04   | texture_height | int16  |   1   | height of textures in this group
-| 0x06   |                | int16  |   1   | unknown small value. maybe animation speed
-| 0x08   | frames[]      | [TextureFrame](#texture-frame) |   ?   | List of Texture Animation Frames.
+| Offset      | Name           | Type           | Count | Description |
+|-------------|----------------|----------------|-------|--------------|
+| 0x00        | texture_group  | int16/\*int32  |   1   | Texture number for SGL.
+| 0x02/\*0x04 | texture_width  | int16/\*int32  |   1   | width of textures in this group
+| 0x04/\*0x08 | texture_height | int16/\*int32  |   1   | height of textures in this group
+| 0x06/\*0x0C |                | int16/\*int32  |   1   | unknown small value. maybe animation speed
+| 0x08/\*0x10 | frames[]      | [TextureFrame](#texture-frame) |   ?   | List of Texture Animation Frames.
+
+_\* Scenario 3 and Premium Disk only_
 
 ## Texture Frame
 
-Size: 4 bytes
+Size: 4/8\* bytes
 
 List of textures in the animation. The offsets point into the
 *compressed* data, only one texture image is compressed in this entry.
-The end of the list is marked by an offset of 0xfffe.
+The end of the list is marked by an offset of 0xfffe (0xfffffffe for Scenario 3 / Premium Disk).
 
-| Offset | Name    | Type   | Count | Description |
-|--------|---------|--------|-------|-------------|
-| 0x00   | offset  | uint16 |   1   | offset into compressed data
-| 0x02   | count   | uint16 |   1   | the number of in-game frames this animation frame is active, at 30fps
+| Offset        | Name    | Type            | Count | Description |
+|---------------|---------|-----------------|-------|-------------|
+| 0x00          | offset  | uint16/\*uint32 |   1   | offset into compressed data
+| 0x02/\*0x04   | count   | uint16/\*uint32 |   1   | the number of in-game frames this animation frame is active, at 30fps
+
+_\* Scenario 3 and Premium Disk only_
 
 ## Boundaries
 
@@ -244,7 +248,7 @@ The chunks are always in the same order, but not all files need all chunk types.
 |    20\*     | alt. surface or unknown  | \nIf Chunk 2 is empty, sometimes the surface model data is located here. However, this is sometimes used for other unknown data (see #chunks-20-and-21)
 |    21\*     | unknown                  | \*Unknown chunk data.
 
-\* Only in Scenario 2, 3, and Premimum Disk
+_\* Only in Scenario 2, 3, and Premimum Disk_
 
 ## Compressed Streams
 
@@ -820,7 +824,7 @@ These values are used for movement costs and land effect values.
 | 0x00   | height       | uint8 | 1     | The average height\* of the tile
 | 0x01   | terrain_type | uint8 | 1     | The type of terrain and its land effect, with optional 0x40 bit for slopes (see #terrain-types)
 
-\* Taken from the average of the tile's 4 values in the surface mesh heightmap
+_\* Taken from the average of the tile's 4 values in the surface mesh heightmap_
 
 ### Terrain Types
 
