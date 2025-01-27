@@ -7,8 +7,9 @@ The mpd files (Map Data) contain the 3d map data for normal travel and battle. M
 * surface model (normals, textures, rendered heightmap)
 * textures and animated textures
 * skybox images
+* heightmap with textures
 * rotating scrolls used as ground (i.e. water)
-* surface tiles (heightmap, terrain types, event IDs)
+* surface tiles (heightmap/walkmesh, terrain types, event IDs)
 * lighting data (direction, palette)
 * camera and battle boundaries
 
@@ -21,19 +22,17 @@ mostly compressed and are loaded to individual memory locations depending on the
 
 ![01 File Overview](img/01_file_overview.png)
 
-| Offset   | Name         | Type       | Count  | Description |
-|----------|--------------|------------|--------|-------------|
-| 0x00     | header       | Header     |   1    | File header. See description in Chapter [Header](#header)
-| 0x2000   | chunk_table  | ChunkTable |   1    | Table with chunk offsets and sized. See description in Chapter [Chunks](#chunks)
-| 0x2100   | chunks       | Chunk[]    | 0..19/\*21  | At most 19 or \*21 chunks. See description in Chapter [Chunks](#chunks)
+| Offset | Name        | Type       | Count              | Description                                                                      |
+|--------|-------------|------------|--------------------|----------------------------------------------------------------------------------|
+| 0x0000 | header      | Header     | 1                  | File header. See description in Chapter [Header](#header)                        |
+| 0x2000 | chunk_table | ChunkTable | 1                  | Table with chunk offsets and sized. See description in Chapter [Chunks](#chunks) |
+| 0x2100 | chunks      | Chunk[]    | 0..21<sup>1)</sup> | At most 21 chunks. See description in Chapter [Chunks](#chunks)                  |
 
-_\* Only in Scenario 2, 3, and Premium Disk_
-
+1) Note that in Scenario 1 there are only 19 chunks and in scenario 2, 3, and Premium Disk are 21 chunks.
 
 # Header
 
-The total header size is always 0x2000 bytes. Unused bytes are padded with zero. 
-
+The total header size is always 0x2000 bytes. Unused bytes are padded with zero.
 
 ## File header
 
@@ -41,10 +40,10 @@ Size: 12 bytes
 
 The first int32 in the file is an offset to a sub header, which contains just another offset to the final header.
 
-| Offset | Name    | Type  | Count | Description |
-|--------|---------|-------|------|-------------|
-| 0x00   | offset1 | int32 |  1   | first header indirection. pointer to sub header
-| 0x04   |         | int32 |  2   | zero (0x0). padding? 
+| Offset | Name    | Type  | Count | Description                                     |
+|--------|---------|-------|-------|-------------------------------------------------|
+| 0x00   | offset1 | int32 | 1     | first header indirection. pointer to sub header |
+| 0x04   |         | int32 | 2     | zero (0x0). padding?                            |
 
 ## Sub Header
 
@@ -52,70 +51,83 @@ Size: 4 bytes
 
 Just an offset to the final header.
 
-| Offset  | Name    | Type  | Count | Description |
-|---------|---------|-------|------|-------------|
-| 0x00    | offset2 | int32 |  1   | second header indirection. pointer to sub sub header
-
+| Offset | Name    | Type  | Count | Description                                          |
+|--------|---------|-------|-------|------------------------------------------------------|
+| 0x00   | offset2 | int32 | 1     | second header indirection. pointer to sub sub header |
 
 ## Sub Sub Header
 
 Size:  0x58 (88) bytes
 
-This is the header.
+This is the main header. In Sc3 and PD there is another palette (`offset_pal_3`) entry.
 
-| Offset  | Name      | Type  | Count | Description |
-|---------|-----------|-------|------|--------------|
-|  0x00   | unknown_1 | int16 |  1   | Unknown. Might be map id.
-|  0x02   | unknown_2 | int16 |  1   | Always zero 0x0000
-|  0x04   | offsetLightPalette | int32 |  1   | Always 0x0c. Pointer to a table of 32 16-bit colors in ABGR1555 format. (#light-palette).
-|  0x08   | offsetLightDirection | int32 |  1   | Always 0x4c. pointer to light direction as pitch and yaw. See (#light-direction).
-|  0x0C   | offset3   | int32 |  1   | Always 0x50. pointer to 0x20 unknown int16s at the start of the file. Mostly zero or 0x8000. (#header-offset-3)
-|  0x10   | unknown_3 | int16 |  1   | Unknown small value. maybe some count?
-|  0x12   | unknown_4 | int16 |  1   | Always zero
-|  0x14   | offset4   | int32 |  1   | Always 0x90. Pointer to unknown structure. See (#header-offset-4)
-|  0x18   | offset_texture_groups | int32 |  1   | Offset to list of texture groups. See (#texture-groups)
-|  0x1C   | offset6   | int32 |  1   | Pointer to unknown list. 
-|  0x20   | offsetBoundaries | int32 |  1   | Pointer to boundaries for the camera and battle map. See (#boundaries)
-|  0x24   | offset_mesh_1 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null. 
-|  0x28   | offset_mesh_2 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
-|  0x2C   | offset_mesh_3 | int32 |  1   | Pointer to list of 2 movable/interactable mesh. may be null.
-|  0x30   | const_1   | int32 |  1   | Const 0x8000b334
-|  0x34   | const_2   | int32 |  1   | Const 0x4ccc0000
-|  0x38   | offset_texture_anim_alternative  | int32 |  1   | Pointer to a list of texture indices. These textures are the same images as the "real" texture animations, but these textures are from the normal texture block (and doesn't seems to be used). See (#texture-animation-alternatives) 
-|  0x3C   | offset_pal_1  | int32 |  1   | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.
-|  0x40   | offset_pal_2  | int32 |  1   | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.
-|  \*0x44   | \*offset_pal_3 | int32 |  1   | \*(see note) Pointer to 256 colors in ABGR1555 format. Non-null.
-|  0x44/\*0x48   | unknown_5 | int32 |  1   | Unknown small value, may be negative.
-|  0x48/\*0x4C   | const_3   | int32 |  1   | Const 0xc000
-|  0x4C/\*0x50   | unknown_6 | int32 |  1   | Unknown. Lower 16 bits often null. May be FIXED.
-|  0x50/\*0x54   | unknown_7 | int32 |  1   | Unknown. Small value in upper int16, 0x0000 in lower int16. May be FIXED.
-|  0x54/\*0x58   | offset12  | int32 |  1   | Pointer to unknown list of exactly 8 uint16 in two block with 4 uint16 each.
+| Offset Sc1/Sc2<sup>1)</sup> | Offset Sc3/PD<sup>2)</sup> | Name                            | Type  | Count | Description                                                                                                                                                                                                                                                                                                                                 |
+|-----------------------------|----------------------------|---------------------------------|-------|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0x00                        |                            | map_flags                       | int16 | 1     | Unknown. Might be map id.                                                                                                                                                                                                                                                                                                                   |
+| 0x02                        |                            | padding                         | int16 | 1     | Always zero 0x0000                                                                                                                                                                                                                                                                                                                          |
+| 0x04                        |                            | offsetLightPalette              | int32 | 1     | Always 0x0c. Pointer to a table of 32 16-bit colors in ABGR1555 format. (#light-palette).                                                                                                                                                                                                                                                   |
+| 0x08                        |                            | offsetLightDirection            | int32 | 1     | Always 0x4c. pointer to light direction as pitch and yaw. See (#light-direction).                                                                                                                                                                                                                                                           |
+| 0x0C                        |                            | offset3                         | int32 | 1     | Always 0x50. pointer to 0x20 unknown int16s at the start of the file. Mostly zero or 0x8000. (#header-offset-3)                                                                                                                                                                                                                             |
+| 0x10                        |                            | view_distance                   | int16 | 1     | This seems to be something like a view distance for meshes from the models chunk. Somehow the meshes are checked if they are in the view frustrum and this field a a parameter to the view frustrum check. It is in grid coordinates (must be multiplied by 20.0). Maybe for interior rooms to limit the drawn objects to the current room. |
+| 0x12                        |                            | padding                         | int16 | 1     | Always zero                                                                                                                                                                                                                                                                                                                                 |
+| 0x14                        |                            | offset_model_switch_groups      | int32 | 1     | Pointer to Model Switch Group List. See [Model Switch Groups](#model-switch-groups)                                                                                                                                                                                                                                                         |
+| 0x18                        |                            | offset_texture_groups           | int32 | 1     | Offset to list of texture groups. See (#texture-groups)                                                                                                                                                                                                                                                                                     |
+| 0x1C                        |                            | offset6                         | int32 | 1     | Pointer to unknown list. Only used in rail1.mpd. 5 values.                                                                                                                                                                                                                                                                                  |
+| 0x20                        |                            | offsetScrollScreenAnimation     | int32 | 1     | Pointer to list of KA table for scroll screen animation [Scroll Screen Animation](#scroll-screen-animation)                                                                                                                                                                                                                                 |
+| 0x24                        |                            | offset_mesh_1                   | int32 | 1     | Pointer to list of 2 movable/interactable mesh. may be null.                                                                                                                                                                                                                                                                                |
+| 0x28                        |                            | offset_mesh_2                   | int32 | 1     | Pointer to list of 2 movable/interactable mesh. may be null.                                                                                                                                                                                                                                                                                |
+| 0x2C                        |                            | offset_mesh_3                   | int32 | 1     | Pointer to list of 2 movable/interactable mesh. may be null.                                                                                                                                                                                                                                                                                |
+| 0x30                        |                            | modelsPreYrotation              | Angle | 1     | mostly 0x8000. The meshes from the models chunk are pre-rotated by this angle                                                                                                                                                                                                                                                               |
+| 0x32                        |                            | modelsViewAngleMin              | Angle | 1     | mostly 0xb334. Has something to do with the view angle. more research necessary.                                                                                                                                                                                                                                                            |
+| 0x34                        |                            | modelsViewAngleMax              | Angle | 1     | mostly 0x4ccc. Has something to do with the view angle. more research necessary.                                                                                                                                                                                                                                                            |
+| 0x36                        |                            | padding                         | int16 | 1     | Always zero                                                                                                                                                                                                                                                                                                                                 |
+| 0x38                        |                            | offset_texture_anim_alternative | int32 | 1     | Pointer to a list of texture indices. These textures are the same images as the "real" texture animations, but these textures are from the normal texture block (and doesn't seems to be used). See (#texture-animation-alternatives)                                                                                                       |
+| 0x3C                        |                            | offset_pal_1                    | int32 | 1     | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.                                                                                                                                                                                                                                        |
+| 0x40                        |                            | offset_pal_2                    | int32 | 1     | Pointer to 256 16-bit colors in ABGR1555 format. Scenario 1+2: May be null. Scenario 3+PD: Non-null.                                                                                                                                                                                                                                        |
+| ----                        | 0x44                       | offset_pal_3                    | int32 | 1     | (see note) Pointer to 256 colors in ABGR1555 format. Non-null.                                                                                                                                                                                                                                                                              |
+| 0x44                        | 0x48                       | scroll_screen_x                 | int16 | 1     | X Pos of scroll screen                                                                                                                                                                                                                                                                                                                      |
+| 0x46                        | 0x4a                       | scroll_screen_y                 | int16 | 1     | Y Pos of scroll screen                                                                                                                                                                                                                                                                                                                      |
+| 0x48                        | 0x4c                       | scroll_screen_z                 | int16 | 1     | Z os of scroll screen.                                                                                                                                                                                                                                                                                                                      |
+| 0x4a                        | 0x4e                       | scroll_screen_angle             | Angle | 1     | Yaw angle (X) of scroll screen                                                                                                                                                                                                                                                                                                              |
+| 0x4C                        | 0x50                       | unknown_4c                      | int16 | 1     | Unknown. Looks like a map coordinate                                                                                                                                                                                                                                                                                                        |
+| 0x4E                        | 0x52                       | background_scroll_x             | int16 | 1     | X Coordinate for background scroll screen.                                                                                                                                                                                                                                                                                                  |
+| 0x50                        | 0x54                       | background_scroll_y             | int16 | 1     | Y Coordinate for background scroll screen.                                                                                                                                                                                                                                                                                                  |
+| 0x52                        | 0x56                       | padding                         | int16 | 1     | padding, always zero                                                                                                                                                                                                                                                                                                                        |
+| 0x54                        | 0x58                       | offsetBoundaries                | int32 | 1     | Pointer to boundaries for the camera and battle map. See [Boundaries](#boundaries)                                                                                                                                                                                                                                                          |
 
-_\* Only for Scenario 3 or Premium Disk_
+1) Offset for Sc1 and Sc2. The field  `offset_pal_3` does not exist in Sc1/Sc2
+2) Offset for Sc3 and PD (when different from Sc1/Sc2).
 
 ## Light Palette
 
-This is a color palette used for lighting, sorted from darkest to lightest. Each value is a 16-bit color in ABGR1555 format. The alpha bit is always zero.
+This is a color palette with 0x20 entries used for lighting, sorted from darkest to lightest. Each value is a 16-bit
+color in ABGR1555
+format. The alpha bit is always zero.
+
+| Offset | Name      | Type   | Count | Description         |
+|--------|-----------|--------|-------|---------------------|
+| 0x00   | light_pal | uint16 | 0x20  | Light palette Color | 
 
 ## Light Direction
 
-| Offset  | Name      | Type   | Count | Description  |
-|---------|-----------|--------|-------|--------------|
-|  0x00   | pitch     | uint16 |  1    | Pitch of the light direction (X/Z rotation). See the table below for values and their meaning.
-|  0x02   | yaw       | uint16 |  1    | Yaw of the light direction (Y rotation). See the table below for values and their meaning.
+| Offset | Name  | Type   | Count | Description                                                                                    |
+|--------|-------|--------|-------|------------------------------------------------------------------------------------------------|
+| 0x00   | pitch | uint16 | 1     | Pitch of the light direction (X/Z rotation). See the table below for values and their meaning. |
+| 0x02   | yaw   | uint16 | 1     | Yaw of the light direction (Y rotation). See the table below for values and their meaning.     |
 
 ### Pitch Values
 
-| Value  | Meaning                                     | Lighting effect                   |
-|--------|---------------------------------------------|-----------------------------------|
-| 0x0000 | Light points forward (north at yaw 0x0000)  | A bit dark, anything with less than a 45 degree slope is very dark
-| 0x4000 | Light points up                             | Completely dark\*
-| 0x8000 | Light points backward (south at yaw 0x0000) | A bit dark, anything less than 45 degree slope is very dark
-| 0xC000 | Light points down                           | Completely bright\*
+| Value  | Meaning                                     | Lighting effect                                                    |
+|--------|---------------------------------------------|--------------------------------------------------------------------|
+| 0x0000 | Light points forward (north at yaw 0x0000)  | A bit dark, anything with less than a 45 degree slope is very dark |
+| 0x4000 | Light points up                             | Completely dark <sup>1)</sup>                                      |
+| 0x8000 | Light points backward (south at yaw 0x0000) | A bit dark, anything less than 45 degree slope is very dark        |
+| 0xC000 | Light points down                           | Completely bright<sup>1)</sup>                                     |
 
 The value 0x9970 is typically used for outside lighting.
 
-_\* This is based on the typical outside light palette. It is not known if brightness differs depending on the palette used._
+1) This is based on the typical outside light palette. It is not known if brightness differs depending on the palette
+   used.
 
 ### Yaw Values
 
@@ -134,36 +146,49 @@ This list contains exactly 16 int32 or 32 int16 values. The purpose is unknown.
 
 This list is most often filled with zeros.
 
-## Header Offset 4
+## Model Switch Groups
 
-Size: 16 bytes
+This list contains model groups which can be switched by setting or clearing a game flag.
+`trigger_flag` is the in game trigger id which can be set or cleared, the `trigger_state` is 0x0 (`false`).
+When the flag is set, the game enables the models from the `enabledModelsOffset` list and disables the models from the
+`disabledModelsOffset`. Then the `trigger_state` is set to `true` and the `enabledModelsOffset`
+and `disabledModelsOffset` lists are swapped.
 
-This list contains some unknown structures. The value_1 are ascending with step 1. The values pointed to by offset_1 
-and offset_2 are small (< 0x100) and are in the same range. They don't need to be ascending, but there won't be 
-duplicates.
+The Group ends when `trigger_flag` is -1;
 
+Size of one list item: 16 bytes
 
-| Offset | Name     | Type  | Count | Description  |
-|--------|----------|-------|-------|--------------|
-| 0x00   | value_1  | int32 |   1   | Unknown small value. 0xffff when the list is finished. 
-| 0x04   | offset_1 | int32 |   1   | Pointer to list of small short values. The list is terminated by 0xffff.
-| 0x08   | offset_2 | int32 |   1   | Pointer to list of small short values. The list is terminated by 0xffff.
-| 0x0C   | value_2  | int32 |   1   | Unknown value, mostly zero.
+| Offset | Name                 | Type  | Count | Description                                                         |
+|--------|----------------------|-------|-------|---------------------------------------------------------------------|
+| 0x00   | trigger_flag         | int32 | 1     | Unknown small value. 0xffff when the list is finished.              |
+| 0x04   | enabledModelsOffset  | int32 | 1     | Pointer to list of uint16 values. The list is terminated by 0xffff. |
+| 0x08   | disabledModelsOffset | int32 | 1     | Pointer to list of uint16 values. The list is terminated by 0xffff. | 
+| 0x0C   | trigger_state        | int32 | 1     | Unknown value, mostly zero.                                         |
 
 ## Texture Groups
 
 This is a list of texture groups which themselves have a list of the textures for the animation.
 The end of the texture group list is marked by 0xffff (texture_group = 0xffff).
 
-| Offset      | Name           | Type           | Count | Description |
-|-------------|----------------|----------------|-------|--------------|
-| 0x00        | texture_group  | int16/\*int32  |   1   | Texture number for SGL.
-| 0x02/\*0x04 | texture_width  | int16/\*int32  |   1   | width of textures in this group
-| 0x04/\*0x08 | texture_height | int16/\*int32  |   1   | height of textures in this group
-| 0x06/\*0x0C |                | int16/\*int32  |   1   | unknown small value. maybe animation speed
-| 0x08/\*0x10 | frames[]      | [TextureFrame](#texture-frame) |   ?   | List of Texture Animation Frames.
+### Scenario 1 and 2
 
-_\* Scenario 3 and Premium Disk only_
+| Offset | Name           | Type                           | Count | Description                                |
+|--------|----------------|--------------------------------|-------|--------------------------------------------|
+| 0x00   | texture_group  | int16                          | 1     | Texture number for SGL.                    |
+| 0x02   | texture_width  | int16                          | 1     | width of textures in this group            |
+| 0x04   | texture_height | int16                          | 1     | height of textures in this group           |
+| 0x06   |                | int16                          | 1     | unknown small value. maybe animation speed |
+| 0x08   | frames[]       | [TextureFrame](#texture-frame) | ?     | List of Texture Animation Frames.          |
+
+### Scenario 3 and Premium Disk
+
+| Offset | Name           | Type                           | Count | Description                                |
+|--------|----------------|--------------------------------|-------|--------------------------------------------|
+| 0x00   | texture_group  | int32                          | 1     | Texture number for SGL.                    |
+| 0x04   | texture_width  | int32                          | 1     | width of textures in this group            |
+| 0x08   | texture_height | int32                          | 1     | height of textures in this group           |
+| 0x0C   |                | int32                          | 1     | unknown small value. maybe animation speed |
+| 0x10   | frames[]       | [TextureFrame](#texture-frame) | ?     | List of Texture Animation Frames.          |        
 
 ## Texture Frame
 
@@ -173,12 +198,35 @@ List of textures in the animation. The offsets point into the
 *compressed* data, only one texture image is compressed in this entry.
 The end of the list is marked by an offset of 0xfffe (0xfffffffe for Scenario 3 / Premium Disk).
 
-| Offset        | Name    | Type            | Count | Description |
-|---------------|---------|-----------------|-------|-------------|
-| 0x00          | offset  | uint16/\*uint32 |   1   | offset into compressed data
-| 0x02/\*0x04   | count   | uint16/\*uint32 |   1   | the number of in-game frames this animation frame is active, at 30fps
+### Scenario 1 and 2
 
-_\* Scenario 3 and Premium Disk only_
+| Offset | Name   | Type   | Count | Description                                                           |
+|--------|--------|--------|-------|-----------------------------------------------------------------------|
+| 0x00   | offset | uint16 | 1     | offset into compressed data                                           |
+| 0x02   | count  | uint16 | 1     | the number of in-game frames this animation frame is active, at 30fps |
+
+### Scenario 3 and Premium Disk
+
+| Offset | Name   | Type   | Count | Description                                                           |
+|--------|--------|--------|-------|-----------------------------------------------------------------------|
+| 0x00   | offset | uint32 | 1     | offset into compressed data                                           |
+| 0x04   | count  | uint32 | 1     | the number of in-game frames this animation frame is active, at 30fps |
+
+## Scroll Screen Animation
+
+This table is used to animate the rotation scroll screen. In sc1 this is only used in saraband (sara02, sara03, sara04).
+
+Experimental: it seems that this is the scroll map configuration (see [2] page 8-21, `void sl1MapRA (void *map_a);`).
+Note that the scroll map for rotating scrolls is always 4x4.
+
+The list is finished when the first value in the item is 0xffff.
+
+List item size: 0x11 * uint16 (0x22)
+
+| Offset | Name           | Type   | Count | Description                                       |
+|--------|----------------|--------|-------|---------------------------------------------------|
+| 0x00   | plane_index    | uint16 | 16    | 4x4 values which plane should be used for the map |
+| 0x20   | frames_to_hold | uint15 | 1     | number of frames to hold the animation            |
 
 ## Boundaries
 
@@ -193,17 +241,16 @@ For example: The center of tile (10, 20) would be at coordinate (336, 656), or (
 
 The battle boundary affects which tiles are selectable during battle and the dimensions of the viewable battle map.
 
-| Offset | Name       | Type   | Count | Description |
-|--------|------------|--------|-------|-------------|
-| 0x00   | unknown    | uint16 |   1   | unknown value
-| 0x02   | camera\_x1 |  int16 |   1   | X1 coordinate for camera bounds
-| 0x04   | camera\_y1 |  int16 |   1   | Y1 coordinate for camera bounds
-| 0x06   | camera\_x2 |  int16 |   1   | X2 coordinate for camera bounds
-| 0x08   | camera\_y2 |  int16 |   1   | Y2 coordinate for camera bounds
-| 0x0A   | battle\_x1 |  int16 |   1   | X1 coordinate for battle map bounds
-| 0x0C   | battle\_y1 |  int16 |   1   | Y1 coordinate for battle map bounds
-| 0x0E   | battle\_x2 |  int16 |   1   | X2 coordinate for battle map bounds
-| 0x10   | battle\_y2 |  int16 |   1   | Y2 coordinate for battle map bounds
+| Offset | Name       | Type  | Count | Description                         |
+|--------|------------|-------|-------|-------------------------------------|
+| 0x00   | camera\_x1 | int16 | 1     | X1 coordinate for camera bounds     |
+| 0x02   | camera\_y1 | int16 | 1     | Y1 coordinate for camera bounds     |
+| 0x04   | camera\_x2 | int16 | 1     | X2 coordinate for camera bounds     |
+| 0x06   | camera\_y2 | int16 | 1     | Y2 coordinate for camera bounds     |
+| 0x08   | battle\_x1 | int16 | 1     | X1 coordinate for battle map bounds |
+| 0x0A   | battle\_y1 | int16 | 1     | Y1 coordinate for battle map bounds |
+| 0x0C   | battle\_x2 | int16 | 1     | X2 coordinate for battle map bounds |
+| 0x0E   | battle\_y2 | int16 | 1     | Y2 coordinate for battle map bounds |
 
 ## Movable or interactible objects
 
@@ -212,41 +259,40 @@ Size: 0x1c (28) bytes
 The objects list contains meshes for barrels, chest and crates. The end of the list is marked by 0x0.
 Sometimes the data is in the file, but the pointer in the header is null, so it is "dangling".
 
-
-| Offset | Name              | Type  | Count | Description |
-|--------|-------------------|-------|-------|--------------|
-| 0x00   | offset_polydata   | int32 |   1   | pointer to PDATA (see SGL)
-| 0x04   | position          | int16 |   3   | Integer part of the position. Decimal part is 0x0000
-| 0x0A   | rotation          | ANGLE |   1   | Rotation of the mesh.
-| 0x10   | scale             | FIXED |   3   | Scale of the mesh.
-
+| Offset | Name            | Type   | Count | Description                                          |
+|--------|-----------------|--------|-------|------------------------------------------------------|
+| 0x00   | offset_polydata | PDATA* | 1     | pointer to PDATA (see SGL)                           |
+| 0x04   | position        | int16  | 3     | Integer part of the position. Decimal part is 0x0000 |
+| 0x0A   | rotation        | ANGLE  | 3     | Rotation of the mesh.                                |
+| 0x10   | scale           | FIXED  | 3     | Scale of the mesh.                                   |
 
 ## Texture animation alternatives
 
-This 16-bit integers in this list are texture indices, the end of the list is marked by 0xffff. The referenced textures
+The 16-bit integers in this list are texture indices, the end of the list is marked by 0xffff. The referenced texture
 images are similar to the ones which are in the [texture animation images](#texture-animation-images) chunk, but these
 textures are from the "normal" [texture chunk](#texture-chunk).
 The image indices are in one list without a separator, so it is not visible which image belongs to which texture group.
-It is unknown how this knowledge can be obtained, or what purpose this list and the alternative texture images have.
+
+This list is used to quickly check if a texture id is part of an animated texture.
 
 # Chunks
 
 Chunks are memory blocks which may be compressed and are placed in specific memory locations, depending on the content.
-The chunks are always in the same order, but not all files need all chunk types. 
+The chunks are always in the same order, but not all files need all chunk types.
 
-| Chunk Index | Name                     | Description
-|-------------|--------------------------|------------
-|    0        | empty_1                  | This chunk always seem to be empty (size 0).
-|    1        | static_meshes            | [Static map objects](#static-meshes). Mesh data and position/rotation/scale.
-|    2        | surface                  | Surface textures, surface normals, and heightmaps for models. Sometimes this is empty in Scenario 2 onward, but present in chunk 20 (see #chunks-20-and-21)
-|    3        | texture_animation_images | Images for animated textures. Each image is individually compressed.
-|    4        | empty_2                  | This chunk always seem to be empty (size 0).
-|    5        | surface_meshes           | Heightmap for each surface tile and some unknown surface attributes. Might be walkmesh and movement costs. The chunk is compressed.
-|  6 - 10     | textures                 | Texture images. The chunks are compressed.
-| 11 - 13     | object_textures          | Textures for movable objects (see [Header](#header)). The chunks are compressed.
-| 14 - 19     | scroll_panes             | Memory blocks for scroll panes (skybox) and rotating scrolls (ground). The chunks are compressed.
-|    20\*     | alt. surface or unknown  | \nIf Chunk 2 is empty, sometimes the surface model data is located here. However, this is sometimes used for other unknown data (see #chunks-20-and-21)
-|    21\*     | unknown                  | \*Unknown chunk data.
+| Chunk Index | Name                     | Description                                                                                                                                                 |
+|-------------|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0           | empty_1                  | This chunk always seem to be empty (size 0).                                                                                                                |
+| 1           | static_meshes            | [Static map objects](#static-meshes). Mesh data and position/rotation/scale.                                                                                |
+| 2           | surface                  | Surface textures, surface normals, and heightmaps for models. Sometimes this is empty in Scenario 2 onward, but present in chunk 20 (see #chunks-20-and-21) |
+| 3           | texture_animation_images | Images for animated textures. Each image is individually compressed.                                                                                        |
+| 4           | empty_2                  | This chunk always seem to be empty (size 0).                                                                                                                |
+| 5           | surface_meshes           | Heightmap for each surface tile and some unknown surface attributes. Might be walkmesh and movement costs. The chunk is compressed.                         |
+| 6 - 10      | textures                 | Texture images. The chunks are compressed.                                                                                                                  |
+| 11 - 13     | object_textures          | Textures for movable objects (see [Header](#header)). The chunks are compressed.                                                                            |
+| 14 - 19     | scroll_panes             | Memory blocks for scroll panes (skybox) and rotating scrolls (ground). The chunks are compressed.                                                           |
+| 20\*        | alt. surface or unknown  | \nIf Chunk 2 is empty, sometimes the surface model data is located here. However, this is sometimes used for other unknown data (see #chunks-20-and-21)     |
+| 21\*        | unknown                  | \*Unknown chunk data.                                                                                                                                       |
 
 _\* Only in Scenario 2, 3, and Premimum Disk_
 
@@ -270,22 +316,20 @@ for the scenario have both an address and size of zero.
 The first chunk starts at 0x2100. As the first chunk is always [static meshes](#static-meshes), this is the chunk at
 0x2100.
 
-| Offset | Name               | Type           | Count | Description
-|--------|--------------------|----------------|-------|-----------------------------
-| 0x00   | chunk_offsets      | offset[]       |  32   | offsets and sizes of the chunk.
+| Offset | Name       | Type     | Count | Description                     |
+|--------|------------|----------|-------|---------------------------------|
+| 0x00   | chunk_item | offset[] | 32    | offsets and sizes of the chunk. |
 
-## Offset
+## Chunk Item
 
 Size: 8 bytes
 
-| Offset | Name    | Type   | Count | Description
-|--------|---------|--------|-------|-----------------------------
-| 0x0    | offset  | int32  |   1   | offset to chunk
-| 0x4    | size    | int32  |   1   | size of chunk
+| Offset | Name   | Type  | Count | Description     |
+|--------|--------|-------|-------|-----------------|
+| 0x0    | offset | int32 | 1     | offset to chunk |
+| 0x4    | size   | int32 | 1     | size of chunk   |   
 
-
-
-# Static Meshes
+# Static Meshes (Chunk 1)
 
 Describes the static meshes in the maps. These are mostly buildings, fences, trees and similar. Some maps use static
 meshes for floor tiles too.
@@ -294,27 +338,70 @@ Note: This whole file is normally loaded to 0x290000, so this chunk will be at o
 chunk are relative to 0x292100. In some maps only this chunk is loaded to 0x60a0000, so you have to adjust the
 logic to make these offsets relative to the file.
 
-TODO:
-The structure of the stuff behind the `offset1` and `offset2` is known, but the meaning of the data is still unknown.
-
 ## Structure
 
 ![mesh overview](img/02_mesh_overview.png)
 
-The chunk consists of the header with the mesh list and the PDATA structures. The order of the PDATA list is: PDATA, 
-list of POINTs, list of POLYGONs and list of polygon ATTRs. After the PDATA structure there are two unknown list of 
-stuff. 
+The chunk consists of the header with the mesh list and the PDATA structures. The order of the PDATA list is: PDATA,
+list of POINTs, list of POLYGONs and list of polygon ATTRs.
 
 ## Mesh header
 
-| Offset | Name         | Type      | Count       | Description
-|--------|--------------|-----------|-------------|-----------------------------
-| 0x00   | offset1      | int32     |   1         | offset to unknown stuff. see (#static-objects-offset1). May be null.
-| 0x04   | offset2      | int32     |   1         | offset to unknown stuff. see (#static-objects-offset2). May be null.
-| 0x08   | num_meshes   | int16      |   1         | number of objects
-| 0x0A   |              | int16      |   1         | padding, 0x00
-| 0x0C   | meshes[]     | Mesh[]    | num_meshes  | for each mesh a [Mesh](#mesh) structure.    
+| Offset | Name                     | Type   | Count      | Description                                  |
+|--------|--------------------------|--------|------------|----------------------------------------------|
+| 0x00   | offset_collision_segment | int32  | 1          | Offset to CollisionSegments header.          |
+| 0x04   | offset_collision_tiles   | int32  | 1          | offset to collision tile table. May be null. |
+| 0x08   | num_meshes               | int16  | 1          | number of objects                            |
+| 0x0A   |                          | int16  | 1          | padding, 0x00                                |
+| 0x0C   | meshes[]                 | Mesh[] | num_meshes | for each mesh a [Mesh](#mesh) structure.     |
 
+## CollisionSegments
+
+| Offset | Name                 | Type  | Count | Description                               |
+|--------|----------------------|-------|-------|-------------------------------------------|
+| 0x00   | offset_points        | int32 | 1     | Offset to list of ShortPoint2D.           |
+| 0x04   | offset_line_segments | int32 | 1     | offset to list of collision line segments |
+
+## ShortPoint2D
+
+List of 2d points for the collision lines. There is no size or count. To get the number of points, you have to
+read the list if Collision Line Segments and find the point with the highest point id.
+
+| Offset | Name | Type  | Count | Description                      |
+|--------|------|-------|-------|----------------------------------|
+| 0x00   | x    | int16 | 1     | x coordinate, integer part only. |
+| 0x02   | y    | int16 | 1     | y coordinate, integer part only. |
+
+## Collision Line Segment
+
+The lines connect two points. The angle rotates the line so the exterior is down.
+The unknown field is used (there are some values), but the purpose is unknown.
+
+There is no size or count field. You have to read all collision tiles to get the highest line segment id and therefore
+the size if the list.
+
+| Offset | Name       | Type  | Count | Description                        |
+|--------|------------|-------|-------|------------------------------------|
+| 0x00   | leftPoint  | int16 | 1     | Index of first point of the line.  |
+| 0x02   | rightPoint | int16 | 1     | Index of second point of the line. |
+| 0x04   | angle      | int16 | 1     | angle of the line                  |
+| 0x06   | unknown    | int16 | 1     | unknown                            |
+
+## Collision Tiles
+
+This is a list of 256 offsets to list of shorts. Each list corresponds to a tile of the map. The shorts are collision
+line segment indices, terminated by 0xffff.
+
+Each tile has the line segments which would be present in this tile and all line segments from the neighbouring tiles.
+This is most likely a performance optimization, so that the collision detection only needs to check the line segments in
+the vicinity of the player.
+
+| Offset | Name       | Type  | Count | Description                        |
+|--------|------------|-------|-------|------------------------------------|
+| 0x00   | leftPoint  | int16 | 1     | Index of first point of the line.  |
+| 0x02   | rightPoint | int16 | 1     | Index of second point of the line. |
+| 0x04   | angle      | int16 | 1     | angle of the line                  |
+| 0x06   | unknown    | int16 | 1     | unknown                            |
 
 ## Mesh
 
@@ -325,20 +412,27 @@ TODO: this might be some kind of level-of-detail.
 
 Note: for PDATA see SGL Reference.
 
-| Offset | Name            | Type      | Count | Description
-|--------|-----------------|-----------|-------|-----------------------------
-| 0x00   | pdata_offsets[] | int32     |   8   | 8 offsets to #PDATA structures. These pdata points to the same mesh and different face attributes (#ATTR).
-| 0x20   | position        | int16[3]  |   1   | position of the mesh in x,y,z. Only the integer part.
-| 0x26   | rotation        | ANGLE[3]  |   1   | rotation of the mesh in SGL ANGLE.
-| 0x2C   | scale           | FIXED[3]  |   1   | scale of the mesh
-| 0x38   | padding         | uint32    |   1   | padding
+| Offset | Name            | Type     | Count | Description                                                                                                |
+|--------|-----------------|----------|-------|------------------------------------------------------------------------------------------------------------|
+| 0x00   | pdata_offsets[] | int32    | 8     | 8 offsets to #PDATA structures. These pdata points to the same mesh and different face attributes (#ATTR). |
+| 0x20   | position        | int16[3] | 1     | position of the mesh in x,y,z. Only the integer part.                                                      |
+| 0x26   | rotation        | ANGLE[3] | 1     | rotation of the mesh in SGL ANGLE.                                                                         |
+| 0x2C   | scale           | FIXED[3] | 1     | scale of the mesh                                                                                          |
+| 0x38   | objectId        | uint16   | 1     | id to identify a mesh. note that the id need not to be unique, 2 meshes can have the same id               |
+| 0x3A   | flags           | uint16   | 1     | mesh flags                                                                                                 |
+
+Known mesh flags:
+
+* 0x10 - looks like this flag hides the object.
+* 0x08 - always face camera
+* 0x07 - 8 view angles, don't know how they are used.
 
 ## Static Objects Offset1
 
-| Offset | Name     | Type   | Count | Description
-|--------|----------|--------|-------|-----------------------------
-| 0x00   | offset1  | int32  |   1   | offset to list of ints. size of the list is unknown.
-| 0x04   | offset2  | int32  |   1   | offset to list of two ints each. size seems to be the same the list at offset1
+| Offset | Name    | Type  | Count | Description                                                                    |
+|--------|---------|-------|-------|--------------------------------------------------------------------------------|
+| 0x00   | offset1 | int32 | 1     | offset to list of ints. size of the list is unknown.                           |
+| 0x04   | offset2 | int32 | 1     | offset to list of two ints each. size seems to be the same the list at offset1 |
 
 Note:
 In the list behind offset2 the first int contains strictly ascending values in the first 16 bits and the last 16 bits.
@@ -407,19 +501,18 @@ Example sara06.json:
 
 ## Static Objects Offset2
 
-| Offset | Name     | Type   | Count | Description
-|--------|----------|--------|-------|-----------------------------
-| 0x00   | offset   | int32  |  256  | list of 256 offsets which each point to a list of shorts.
-
+| Offset | Name   | Type  | Count | Description                                               |
+|--------|--------|-------|-------|-----------------------------------------------------------|
+| 0x00   | offset | int32 | 256   | list of 256 offsets which each point to a list of shorts. |
 
 List of shorts:
-| Offset | Name       | Type   | Count | Description
-|--------|------------|--------|-------|-----------------------------
-| 0x00   | value      | int16  |  ?    | small unknown short
-| ??     | end_marker | int16  |  1    | 0xFFFF. Marks the end of list.
 
+| Offset | Name       | Type  | Count | Description                    |
+|--------|------------|-------|-------|--------------------------------|
+| 0x00   | value      | int16 | ?     | small unknown short            |
+| ??     | end_marker | int16 | 1     | 0xFFFF. Marks the end of list. |
 
-These list form some kind of triangles (see example). A very wild guess might be some kind of 
+These list form some kind of triangles (see example). A very wild guess might be some kind of
 [BSP Tree](https://en.wikipedia.org/wiki/Binary_space_partitioning) to detect meshes which doesn't need to be drawn.
 
 Example sara06.json:
@@ -692,12 +785,12 @@ The surface chunk consists of three parts which each describe some detail about 
 The first part is the tile character (aka "texture"), the second is the tile surface normal, and the third part is
 a heightmap.
 
-The map consists of 64x64 tiles. In this chunk the tiles are not saved row or column based. The map is split in 16x16
+The map consists of 64x64 tiles. In this chunk the tiles are not saved row or column based. The map is split in 8x8
 blocks of 4x4 tiles each. The tiles in these blocks are saved in row major order, and the blocks themselves are saved in
-row major order too. Some blocks (normals, unknown) describe the corner points of the tiles, so the blocks are 5x5. 
+row major order too. Some blocks (normals, unknown) describe the corner points of the tiles, so the blocks are 5x5.
 
-The surface chunk is used primary when the ground is uneven (hills, slopes) or has different heights (platforms). In this
-case the heightmap in the surface heights chunk describes the geometry.
+The surface chunk is used primary when the ground is uneven (hills, slopes) or has different heights (platforms). In
+this case the height map in the surface heights chunk describes the geometry.
 
 This chunk is not present for maps without battles that use rotating scrolls as the ground texture.
 
@@ -710,30 +803,30 @@ and can be partly transparent.
 
 Each surface character is divided into 8 bits for flags and a uint8 for the texture ID:
 
-| Offset | Name       | Type  | Count | Description
-|--------|------------|-------|-------|-----------------------------
-| 0x00   | flags      | uint8 | 1     | Various flags for the texture and surface model (see table below for values)
-| 0x01   | texture_id | uint8 | 1     | The ID of the texture for this tile
+| Offset | Name       | Type  | Count | Description                                                                  |
+|--------|------------|-------|-------|------------------------------------------------------------------------------|
+| 0x00   | flags      | uint8 | 1     | Various flags for the texture and surface model (see table below for values) |
+| 0x01   | texture_id | uint8 | 1     | The ID of the texture for this tile                                          |
 
 ### Surface Character Flags
 
 #### Rotation Bits 0x01 and 0x02
 
-| Value | Meaning |
-|-------|---------|
-| 0x00  | No rotation
-| 0x01  | 90  degree counter-clockwise rotation
-| 0x02  | 180 degree rotation
-| 0x03  | 270 degree clockwise rotation
+| Value | Meaning                               |
+|-------|---------------------------------------|
+| 0x00  | No rotation                           |
+| 0x01  | 90  degree counter-clockwise rotation |
+| 0x02  | 180 degree rotation                   |
+| 0x03  | 270 degree clockwise rotation         |
 
 #### Flip Bits 0x10 and 0x20
 
-| Value | Meaning |
-|-------|---------|
-| 0x00  | No flip
-| 0x10  | Horizontal flip
-| 0x20  | Vertical flip
-| 0x30  | Horizontal and vertical flip
+| Value | Meaning                      |
+|-------|------------------------------|
+| 0x00  | No flip                      |
+| 0x10  | Horizontal flip              |
+| 0x20  | Vertical flip                |
+| 0x30  | Horizontal and vertical flip |
 
 #### Flat Bit 0x80
 
@@ -745,46 +838,52 @@ the corresponding tile in the *surface mesh heightmap*, rather than the *surface
 The surface normals are saved as 3 compressed FIXED for each tile.
 Note that the blocks are 5x5 here. So the normals are vertex normals and not face normals.
 
-The normals are in an atypical format whose exact calculations are not known. The numbers have the following characteristics:
+The normals are in an atypical format whose exact calculations are not known. The numbers have the following
+characteristics:
 
 - Each component is a signed 16-bit compressed fixed
 - The flat, upward-facing normal is always (0x0000, 0x0001, 0x0000).
 - The magnitude of the normal increases as the tile slope increases, but there is no known pattern
 - The X and Z coordinates are a 2D directional vector
-- The 0x0001 bit is a redundant sign bit that is set when when *positive* for the Y component, but when *negative* for the X/Z components.
+- The 0x0001 bit is a redundant sign bit that is set when when *positive* for the Y component, but when *negative* for
+  the X/Z components.
 
-Here are some sample data points taken from slopes with identical neighbors across various MPD files. The normals seen in
+Here are some sample data points taken from slopes with identical neighbors across various MPD files. The normals seen
+in
 SF3 are referred to as "abnormals":
 
-(This data was gathered before the redundant 0x0001 sign bit was known. The "abnormal" values are probably half of what is listed here.)
+(This data was gathered before the redundant 0x0001 sign bit was known. The "abnormal" values are probably half of what
+is listed here.)
 
-| Slope | Angle              |  X  |  Y     | Z  |  NormalY            |  NormalZ            |  AbnormalY  | AbnormalZ  |
-|-------|--------------------|-----|--------|----|---------------------|---------------------|-------------|------------|
-| -300  | -71.5650511791235  |  0  | -3     | 1  |  0.316227766016837  |  0.948683298050514  |  0.8906555  | 1.66409302 |
-| -225  | -66.0375110273093  |  0  | -2.25  | 1  |  0.406138466053448  |  0.913811548620257  |  0.6712951  | 1.4947815  |
-| -200  | -63.4349488247351  |  0  | -2     | 1  |  0.447213595499958  |  0.894427190999916  |  0.585846   | 1.41454    |
-| -150  | -56.3099324756297  |  0  | -1.5   | 1  |  0.554700196225229  |  0.832050294337844  |  0.4000549  | 1.1999817  |
-| -100  | -45.0000000012862  |  0  | -1     | 1  |  0.707106781186547  |  0.707106781186548  |  0.2111511  | 0.8943786  |
-|  -75  | -36.8698976468978  |  0  | -0.75  | 1  |  0.8                |  0.6                |  0.1273499  | 0.70224    |
-|  -50  | -26.5650511778373  |  0  | -0.5   | 1  |  0.894427190999916  |  0.447213595499958  |  0.0597229  | 0.4850158  |
-|  -25  | -14.0362434683277  |  0  | -0.25  | 1  |  0.970142500145332  |  0.242535625036334  |  0.0154724  | 0.2480469  |
-|    0  |   0                |  0  |  0     | 1  |  1                  |  0                  |  0.0000305  | 0          |
-|   25  |  14.0362434683277  |  0  |  0.25  | 1  |  0.970142500145332  | -0.242535625036334  |  0.0154724  | 0.2480469  |
-|   50  |  26.5650511778373  |  0  |  0.5   | 1  |  0.894427190999916  | -0.447213595499958  |  0.0597229  | 0.4850158  |
-|   75  |  36.8698976468978  |  0  |  0.75  | 1  |  0.8                | -0.6                |  0.1273499  | 0.70224    |
-|  100  |  45.0000000012862  |  0  |  1     | 1  |  0.707106781186547  | -0.707106781186548  |  0.2111511  | 0.8943786  |
-|  150  |  56.3099324756297  |  0  |  1.5   | 1  |  0.554700196225229  | -0.832050294337844  |  0.4000549  | 1.1999817  |
-|  200  |  63.4349488247351  |  0  |  2     | 1  |  0.447213595499958  | -0.894427190999916  |  0.585846   | 1.41454    |
-|  225  |  66.0375110273093  |  0  |  2.25  | 1  |  0.406138466053448  | -0.913811548620257  |  0.6712951  | 1.4947815A |
-|  300  |  71.5650511791235  |  0  |  3     | 1  |  0.316227766016837  | -0.948683298050514  |  0.8906555  | 1.66409302 |
+| Slope | Angle             | X | Y     | Z | NormalY           | NormalZ            | AbnormalY | AbnormalZ  |
+|-------|-------------------|---|-------|---|-------------------|--------------------|-----------|------------|
+| -300  | -71.5650511791235 | 0 | -3    | 1 | 0.316227766016837 | 0.948683298050514  | 0.8906555 | 1.66409302 |
+| -225  | -66.0375110273093 | 0 | -2.25 | 1 | 0.406138466053448 | 0.913811548620257  | 0.6712951 | 1.4947815  |
+| -200  | -63.4349488247351 | 0 | -2    | 1 | 0.447213595499958 | 0.894427190999916  | 0.585846  | 1.41454    |
+| -150  | -56.3099324756297 | 0 | -1.5  | 1 | 0.554700196225229 | 0.832050294337844  | 0.4000549 | 1.1999817  |
+| -100  | -45.0000000012862 | 0 | -1    | 1 | 0.707106781186547 | 0.707106781186548  | 0.2111511 | 0.8943786  |
+| -75   | -36.8698976468978 | 0 | -0.75 | 1 | 0.8               | 0.6                | 0.1273499 | 0.70224    |
+| -50   | -26.5650511778373 | 0 | -0.5  | 1 | 0.894427190999916 | 0.447213595499958  | 0.0597229 | 0.4850158  |
+| -25   | -14.0362434683277 | 0 | -0.25 | 1 | 0.970142500145332 | 0.242535625036334  | 0.0154724 | 0.2480469  |
+| 0     | 0                 | 0 | 0     | 1 | 1                 | 0                  | 0.0000305 | 0          |
+| 25    | 14.0362434683277  | 0 | 0.25  | 1 | 0.970142500145332 | -0.242535625036334 | 0.0154724 | 0.2480469  |
+| 50    | 26.5650511778373  | 0 | 0.5   | 1 | 0.894427190999916 | -0.447213595499958 | 0.0597229 | 0.4850158  |
+| 75    | 36.8698976468978  | 0 | 0.75  | 1 | 0.8               | -0.6               | 0.1273499 | 0.70224    |
+| 100   | 45.0000000012862  | 0 | 1     | 1 | 0.707106781186547 | -0.707106781186548 | 0.2111511 | 0.8943786  |
+| 150   | 56.3099324756297  | 0 | 1.5   | 1 | 0.554700196225229 | -0.832050294337844 | 0.4000549 | 1.1999817  |
+| 200   | 63.4349488247351  | 0 | 2     | 1 | 0.447213595499958 | -0.894427190999916 | 0.585846  | 1.41454    |
+| 225   | 66.0375110273093  | 0 | 2.25  | 1 | 0.406138466053448 | -0.913811548620257 | 0.6712951 | 1.4947815A |
+| 300   | 71.5650511791235  | 0 | 3     | 1 | 0.316227766016837 | -0.948683298050514 | 0.8906555 | 1.66409302 |
 
 ## Surface Model Heightmaps
 
-The surface model heightmaps are stored in the same order as the surface normals: there are several blocks of 5x5 with each point
+The surface model heightmaps are stored in the same order as the surface normals: there are several blocks of 5x5 with
+each point
 representing a vertex in a mesh. Each point is a single byte.
 
 Each heightmap is generated using data from the "surface mesh heightmap" seen in chunk 5 (see #surface-mesh-heightmap).
-This has been confirmed by an automated analysis comparing the "block" heightmaps and "surface mesh" heightmaps across all
+This has been confirmed by an automated analysis comparing the "block" heightmaps and "surface mesh" heightmaps across
+all
 discs.
 
 In the case that all tiles connected to a vertex in the heightmap are flat, the vertex is unused and may be
@@ -795,9 +894,9 @@ Changing this heightmap will affect how the surface model is rendered, but not t
 # Texture Animation Images
 
 When the header has some animated textures, the corresponding images are in this chunk. The header points directly to a
-single image (character) into this chunk, which is compressed individually. The position and number of images in the chunk
+single image (character) into this chunk, which is compressed individually. The position and number of images in the
+chunk
 can only be determined from the header.
-
 
 # Surface Mesh Chunk
 
@@ -808,8 +907,9 @@ The size of the map is always 64x64 tiles. The parts are: heightmap, unknown int
 
 ## Surface Mesh Heightmap
 
-Each tiles height of the 4 corners is saved as 4 uint8 (there are no negative heights), starting at the bottom-right corner
-going clockwise.  Multiply their values by 2 to get the correct world coordinate.
+Each tiles height of the 4 corners is saved as 4 uint8 (there are no negative heights), starting at the bottom-right
+corner
+going clockwise. Multiply their values by 2 to get the correct world coordinate.
 Neighbouring tiles do not need to have the same height at the edge, so there can be a "gap" in the mesh.
 This gap will either be closed by [objects](#static-meshes) or left open when is cannot be seen during normal play.
 
@@ -819,46 +919,49 @@ Changing this heightmap will affect the walking mesh, but not how the surface mo
 
 These values are used for movement costs and land effect values.
 
-| Offset | Name         | Type  | Count | Description |
-|--------|--------------|-------|-------|-------------|
-| 0x00   | height       | uint8 | 1     | The average height\* of the tile
-| 0x01   | terrain_type | uint8 | 1     | The type of terrain and its land effect, with optional 0x40 bit for slopes (see #terrain-types)
+| Offset | Name         | Type  | Count | Description                                                                                     |
+|--------|--------------|-------|-------|-------------------------------------------------------------------------------------------------|
+| 0x00   | height       | uint8 | 1     | The average height\* of the tile                                                                |
+| 0x01   | terrain_type | uint8 | 1     | The type of terrain and its land effect, with optional 0x40 bit for slopes (see #terrain-types) |
 
 _\* Taken from the average of the tile's 4 values in the surface mesh heightmap_
 
 ### Terrain Types
 
-Tiles are defined by hard-coded terrain types. How sprites are affected by these terrain types depends on their movement type,
+Tiles are defined by hard-coded terrain types. How sprites are affected by these terrain types depends on their movement
+type,
 which uses another hard-coded table to determine costs.
 
-Terrain type sometimes contains a 0x40 bit present on steep slopes. This reduces the movement penalty for the tile's height. Exactly how
+Terrain type sometimes contains a 0x40 bit present on steep slopes. This reduces the movement penalty for the tile's
+height. Exactly how
 this works is unknown, but the height-based penalty appears to be cut roughly in half.
 
-| Value  | Meaning |
-|--------|---------|
-| 0x00   | No entry (barrier for everything)
-| 0x01   | Air
-| 0x02   | Grassland
-| 0x03   | Dirt
-| 0x04   | Dark Grass
-| 0x05   | Forest
-| 0x06   | Brown Mountain
-| 0x07   | Desert
-| 0x08   | Grey Mountain
-| 0x09   | Water
-| 0x0A   | Unknown A (appears to be "can't stop here" tiles)
-| 0x0B   | Sand
-| 0x0C   | Enemy only
-| 0x0D   | Unknown D (appears to be "map move" tiles)
-| 0x0E   | Unknown E
-| 0x0F   | Unknown F
+| Value | Meaning                                           |
+|-------|---------------------------------------------------|
+| 0x00  | No entry (barrier for everything)                 |
+| 0x01  | Air                                               |
+| 0x02  | Grassland                                         |
+| 0x03  | Dirt                                              |
+| 0x04  | Dark Grass                                        |
+| 0x05  | Forest                                            |
+| 0x06  | Brown Mountain                                    |
+| 0x07  | Desert                                            |
+| 0x08  | Grey Mountain                                     |
+| 0x09  | Water                                             |
+| 0x0A  | Unknown A (appears to be "can't stop here" tiles) |
+| 0x0B  | Sand                                              |
+| 0x0C  | Enemy only                                        |
+| 0x0D  | Unknown D (appears to be "map move" tiles)        |
+| 0x0E  | Unknown E                                         |
+| 0x0F  | Unknown F                                         |
 
 ## Event IDs
 
 An array of 64x64 uint8 values, one for each tile. Most values are zero.
 
 If non-zero, these values correspond to warps, interactable items or text, and other scripting events such as a
-trigger to open ruins. Exactly how these values work is still not known. They often correspond to scripts in an X1\*.bin file.
+trigger to open ruins. Exactly how these values work is still not known. They often correspond to scripts in an X1\*.bin
+file.
 
 # Texture Chunk
 
@@ -872,23 +975,22 @@ Unused texture chunks are present (size > 0), but the num_textures are 0.
 
 ## Texture Chunk Header
 
-| Offset | Name            | Type      | Count        | Description
-|--------|-----------------|-----------|--------------|-----------------------------
-| 0x00   | num_textures    | int16      |   1          | number of  textures in chunk
-| 0x02   | texture_id_start| int16      |   1          | start id of the textures in this block.
-| 0x04   | texture_def[]   | TextureDefinition | num_textures | texture definitions
-| ???    | texture_data    | byte      |   ?          | texture data         
+| Offset | Name             | Type              | Count        | Description                             |
+|--------|------------------|-------------------|--------------|-----------------------------------------|
+| 0x00   | num_textures     | int16             | 1            | number of  textures in chunk            |
+| 0x02   | texture_id_start | int16             | 1            | start id of the textures in this block. |
+| 0x04   | texture_def[]    | TextureDefinition | num_textures | texture definitions                     |
+| ???    | texture_data     | byte              | ?            | texture data                            |
 
 ## Texture Definition
 
 Size: 4 byte
 
-| Offset | Name     | Type | Count | Description
-|--------|----------|------|-------|-----------------------------
-| 0x00   | width    | uint8 |   1   | width of texture
-| 0x01   | height   | uint8 |   1   | height of texture
-| 0x02   | offset   | int16 |   1   | byte offset of texture in decompressed data stream
-
+| Offset | Name   | Type  | Count | Description                                        |
+|--------|--------|-------|-------|----------------------------------------------------|
+| 0x00   | width  | uint8 | 1     | width of texture                                   |
+| 0x01   | height | uint8 | 1     | height of texture                                  |
+| 0x02   | offset | int16 | 1     | byte offset of texture in decompressed data stream |
 
 # Scroll Panes
 
@@ -903,9 +1005,9 @@ transformation applied. It can be viewed as a single huge quadratic polygon. Mos
 the ground texture. Note that there can be only one rotating scroll pane. For further details see [1].
 
 The scroll pane content of both types can be supplied in two formats: cell format and bitmap format.
-The bitmap format is simply the pixels row major order, either rgb16 or palette format. In SF3 only the 256 colors 
+The bitmap format is simply the pixels row major order, either rgb16 or palette format. In SF3 only the 256 colors
 palette format is used.
-The cell format places character images in a repeating pattern to form a very big image. The exact format is described 
+The cell format places character images in a repeating pattern to form a very big image. The exact format is described
 in [1].
 
 ## Scroll Pane Chunks
@@ -913,26 +1015,27 @@ in [1].
 The scroll pane chunks are always compressed.
 
 The chunks can have three different kind of data: character images, pattern name data or bitmap data.
-Character images are simply 8x8 pixels 256 colors characters. The characters I've encountered always used the first 
+Character images are simply 8x8 pixels 256 colors characters. The characters I've encountered always used the first
 palette. Most often the first two chunks are character data.
 
-The pattern name data chunks contains the character numbers for a page (see [1]). Sf3 used the word format, where the 
+The pattern name data chunks contains the character numbers for a page (see [1]). Sf3 used the word format, where the
 least significant 12 bits are the character number. The upper 4 bits should be flip configuration, but SF3 seems not to
-use them. One chunk contains 8 pages with 64x64 characters each. 
-Most often the third chunk contains the pattern name data and sometimes the 6th chunk contains another pattern name 
-data table. 
+use them. One chunk contains 8 pages with 64x64 characters each.
+Most often the third chunk contains the pattern name data and sometimes the 6th chunk contains another pattern name
+data table.
 Implementation note: The character indices must be shifted right one bit, so only bits 1..11 is used for character id.
 The lsb is always zero. Is the first bit the palette id?
 
-TODO: Somehow the map must be configured. A map is an array of 4x4 pages. The location of this configuration is not 
+TODO: Somehow the map must be configured. A map is an array of 4x4 pages. The location of this configuration is not
 known. The scroll panes are sometimes animated (water), the animation configuration is unknown too.
 
 Bitmap chunks are raw 512x128 images in 256 color. These are mostly used .
-Bitmaps in chunk 4 are skyboxes and are battle backgrounds (I think, there are still issues, see examples). Skyboxes mostly use the second palette. 
-Bitmaps in chunk 0 and 1 are used as floor texture, for example grass and static water. Bitmaps floor doesn't seem to 
+Bitmaps in chunk 4 are skyboxes and are battle backgrounds (I think, there are still issues, see examples). Skyboxes
+mostly use the second palette.
+Bitmaps in chunk 0 and 1 are used as floor texture, for example grass and static water. Bitmaps floor doesn't seem to
 be animated. Floor bitmaps mostly use the first palette.
 
-TODO: the bitmap scroll pane needs at least 512x256 pixels, which can be seen in the game. The lower half of the 
+TODO: the bitmap scroll pane needs at least 512x256 pixels, which can be seen in the game. The lower half of the
 background is not encoded in the map file. Where is the lower half of the image? Wild guess: x2\*.bin files.
 
 ## Examples
@@ -955,22 +1058,28 @@ way the animation is created.
 
 ![Skybox from in game from bridge battle (taken with yabause)](img/10_sara06_ingame_skybox.png)
 
-Skybox from the file sara06.mpd chunk 4 (512x128) and taken from the game with yabause (NBG0, 320x320). Note the mountain in the
-background which matches in both files, whereas in the game there are some buildings and crates which are not in the mpd file. 
+Skybox from the file sara06.mpd chunk 4 (512x128) and taken from the game with yabause (NBG0, 320x320). Note the
+mountain in the
+background which matches in both files, whereas in the game there are some buildings and crates which are not in the mpd
+file.
 
 # Chunks 20 and 21
 
 From Scenario 2 onwards, chunks 20 and 21 are present. However, there's some strange logic for what's in here:
 
-1. If chunk 2 (surface models) is *missing*, and chunk 20 is present, it always contains the surface models instead, with the exact same same
-size and data as seen in chunk 2. Chunk 21 is always missing in this case.
+1. If chunk 2 (surface models) is *missing*, and chunk 20 is present, it always contains the surface models instead,
+   with the exact same same
+   size and data as seen in chunk 2. Chunk 21 is always missing in this case.
 
-2. If chunk 2 (surface models) is *present*, then chunk 20 is almost always present, with the exception of three files in Scenario 3 (BTLA8.MPD, FUTTO.MPD, and LEMON.MPD).
-Chunk 21 is *sometimes* present in this case, and it doesn't appear to be an "overflow" chunk that's only present if chunk 20 is too large.
+2. If chunk 2 (surface models) is *present*, then chunk 20 is almost always present, with the exception of three files
+   in Scenario 3 (BTLA8.MPD, FUTTO.MPD, and LEMON.MPD).
+   Chunk 21 is *sometimes* present in this case, and it doesn't appear to be an "overflow" chunk that's only present if
+   chunk 20 is too large.
 
 It's unknown why the surface model data is sometimes located in chunk 20 instead of chunk 2.
 
-When chunk 20 isn't surface data, the contents of chunks 20 and 21 are currently unknown. It likely is something added to scenario 2, like fog/snow
+When chunk 20 isn't surface data, the contents of chunks 20 and 21 are currently unknown. It likely is something added
+to scenario 2, like fog/snow
 effects in and outside of battle, or battle lighting data.
 
 # Issues and open points
@@ -979,8 +1088,34 @@ effects in and outside of battle, or battle lighting data.
 * read list at ~~offset6 and~~ offset7. used in sara02 and sara04
 * plot small values (< 0x100) throughout the various lists so similarities can be found.
 
+# Appendix
+
+## Memory locations for objects
+
+The static map objects (see [chunk static meshes](#static-meshes)) are loaded to 2 different memory locations, depending
+on the map. All offsets in the mesh chunk are based on this offset and are not relative to the file. Some files load the
+objects to 0x292100 and some to 0x60a0000. Below is the list of files which load the objects to 0x60a0000, all other
+maps use 0x292100.
+
+bochi.mpd, btl019.mpd, bochim.mpd, tori00.mpd, nasu00.mpd, yakata.mpd, tesmap.mpd, btl02.mpd, btl03.mpd, btl04a.mpd,
+btl06.mpd, btl12.mpd, btl17.mpd, btl21.mpd, btl24.mpd, chou00.mpd, fed06.mpd, field.mpd, furain.mpd, gdi5.mpd, gdi.mpd,
+zlv1.mpd, zlv2.mpd, zlv3.mpd, zlv4.mpd, yaka2.mpd, yaka3.mpd, yaka4.mpd, point.mpd, hrnaka.mpd, hrrail.mpd, inka00.mpd,
+mgma00.mpd, mgma01.mpd, muhasi.mpd, sara05.mpd, shief1.mpd, shief2.mpd, shief3.mpd, shief4.mpd, shief5.mpd, shio00.mpd,
+tnka00.mpd, tomt00.mpd, toue00.mpd, tree00.mpd, turi00.mpd, turi01.mpd, zoku00.mpd
+
+## ship2.mpd
+
+        put("ship2.mpd" , 0x252100);
+
+# Thanks
+
+Some people have contributed knowledge to this specification:
+
+* Schlock (Andreas Scholl, https://github.com/AndreasScholl)
+* Synival (https://github.com/Synival)
 
 # References
 
 [1] VDP2 User Manual (ST-058-R2-060194)
+[2] SGL Developers Manual (ST-237-R1-051795)
 
